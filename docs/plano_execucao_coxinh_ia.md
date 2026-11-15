@@ -82,43 +82,46 @@ As funções de consulta recebem os dados relevantes do estado para montar a bus
 
 ### Etapa 1: Modelos de dados e estado
 
-**Arquivos previstos:** `src/coxinh_ia/schemas.py`, `src/coxinh_ia/state.py` e testes correspondentes.
+**Arquivos previstos:** `src/schemas.py`, `src/state.py` e testes correspondentes.
 
-**Code:** define o formato validado da receita, da crítica e do estado necessário ao fluxo inicial. Inclui a entrada do usuário, os recursos autorizados, a proposta, a decisão de revisão, os contadores de tentativas e a versão. Campos de persistência e integrações podem ser acrescentados nas etapas em que forem usados.
+**Code:** define o formato validado da receita, da crítica e do estado necessário ao fluxo inicial. Inclui a entrada do usuário, os recursos autorizados, a proposta, a decisão de revisão, os contadores e as versões com responsabilidades distintas. Campos de integrações podem ser acrescentados nas etapas em que forem usados.
 
 O estado deve distinguir:
 
-* `tentativas_ciclo`: quantidade de propostas avaliadas pelo SubChef no ciclo atual.
-* `tentativas_total`: quantidade acumulada de propostas avaliadas na conversa, incluindo ciclos anteriores.
-* `version`: revisão atual do registro persistido que contém o estado da receita e os dados protegidos contra alterações concorrentes.
+* `recipe_version`: número da proposta de receita; começa em `0` antes da primeira proposta e avança quando o Chef cria uma nova versão.
+* `revision_count`: quantidade de revisões do Chef feitas no ciclo atual. Só aumenta quando uma rejeição permite retornar ao Chef.
+* `total_attempts`: quantidade de avaliações válidas do SubChef na conversa, incluindo ciclos anteriores.
+* `max_revisions`: quantidade máxima de revisões do Chef permitidas por ciclo; não inclui a proposta inicial.
+* `state_version`: versão do registro persistido, atualizada atomicamente pela camada de persistência.
+* `state_schema_version`: versão do formato técnico do estado.
 
-`expected_version` representa a versão que quem solicitou uma atualização acredita estar vigente. Esse valor pertence ao pedido de atualização e será comparado com a versão persistida na etapa 6.
+`expected_state_version` pertence ao pedido de atualização, não ao estado persistido. A camada de persistência compara esse valor com `state_version` ao salvar a alteração.
 
-**Reviewer:** confere nomes, tipos, campos obrigatórios e se os modelos representam claramente uma proposta, uma crítica e o status do fluxo. Verifica que os dois contadores têm responsabilidades distintas.
+**Reviewer:** confere nomes, tipos, campos obrigatórios e se os modelos representam claramente uma proposta, uma crítica e o status do fluxo. Verifica que revisões, avaliações e versões têm responsabilidades distintas.
 
 **Concluir quando:** dados válidos são aceitos, dados inválidos são rejeitados com erro compreensível e os testes passam.
 
 ### Etapa 2: Regras determinísticas e testes
 
-**Arquivos previstos:** `src/coxinh_ia/routing.py`, módulo de validação de recursos ou funções equivalentes e `tests/`.
+**Arquivos previstos:** `src/graph/routing.py`, módulo de validação de recursos ou funções equivalentes e `tests/`.
 
-**Code:** implementa regras que não precisam de LLM: limite de tentativas, contadores, incremento de versão, estados possíveis e decisão de para onde o fluxo segue. Implementa também a lógica de `validar_recursos_receita`, inicialmente como serviço local.
+**Code:** implementa regras que não precisam de LLM: limite de revisões, contadores, estados possíveis e decisão de para onde o fluxo segue. A versão da receita é atualizada quando o Chef cria uma proposta; a versão concorrente do estado é atualizada atomicamente pela persistência. Implementa também a lógica de `validar_recursos_receita`, inicialmente como serviço local.
 
-Para evitar ambiguidade na contagem:
+Para evitar ambiguidade na contagem, `max_revisions = 2` permite a proposta inicial mais duas revisões, totalizando até três propostas avaliadas:
 
-1. Uma decisão válida do SubChef sobre uma proposta conta como uma tentativa avaliada e incrementa os dois contadores uma vez.
-2. Se a proposta for aprovada, o fluxo segue para o Cozinheiro, inclusive quando a aprovação ocorrer na última tentativa permitida.
-3. Se for rejeitada e `tentativas_ciclo` estiver abaixo do limite, o fluxo volta ao Chef com a crítica.
-4. Se for rejeitada e o limite tiver sido atingido, o fluxo vai para o Impasse.
-5. Falha técnica de uma chamada não equivale a rejeição da proposta e não deve consumir uma tentativa de revisão como se houvesse uma decisão do SubChef.
+1. Cada decisão válida do SubChef incrementa `total_attempts` uma vez.
+2. Se a proposta for aprovada, o fluxo segue para o Cozinheiro, mesmo após o limite de revisões ter sido usado.
+3. Se for rejeitada e `revision_count < max_revisions`, incrementa `revision_count` e retorna ao Chef.
+4. Se for rejeitada quando `revision_count == max_revisions`, o fluxo vai para o Impasse; não incrementa `revision_count`.
+5. Uma falha técnica não é uma decisão válida e não incrementa nenhum contador.
 
-O limite é configurável. Por exemplo, um limite de duas tentativas permite avaliar duas propostas naquele ciclo. A regra de reinício do contador fica vinculada à retomada explícita da etapa 6.
+O limite é configurável. Ao iniciar um novo ciclo após uma retomada explícita na etapa 6, zerar `revision_count`, preservar `total_attempts` e manter `recipe_version` crescente.
 
 A validação de recursos compara a receita com o pedido autorizado vigente, incluindo alterações feitas pelo usuário no Impasse. O contrato deve deixar explícito como identificar ingredientes, utensílios e meios de preparo, para que a comparação não dependa de interpretar uma justificativa em texto livre.
 
-**Reviewer:** verifica aprovação, rejeição, limite atingido, valores inválidos e fidelidade aos recursos autorizados. Confirma que a decisão de roteamento usa campos estruturados e que uma falha técnica não é contabilizada como reprovação.
+**Reviewer:** verifica aprovação na última proposta permitida, rejeição com revisão disponível, rejeição após esgotar as revisões, valores inválidos e fidelidade aos recursos autorizados. Confirma que a decisão de roteamento usa campos estruturados e que uma falha técnica não é contabilizada como reprovação.
 
-**Concluir quando:** os casos principais e de limite têm testes automatizados; recursos não autorizados são apontados; aprovação na última tentativa segue corretamente para o Cozinheiro.
+**Concluir quando:** os casos principais e de limite têm testes automatizados; recursos não autorizados são apontados; a aprovação sempre segue para o Cozinheiro e a rejeição após o limite segue para o Impasse.
 
 ### Etapa 3: Configuração e adaptador de LLM
 
@@ -161,15 +164,15 @@ O SubChef verifica os critérios do projeto, como massa, recheio, modo de prepar
 O comportamento esperado é:
 
 1. **Salvar:** registra ingredientes ou orientações e mantém a execução pausada. Não chama o LLM e não reinicia os contadores.
-2. **Retomar:** registra primeiro a atualização autorizada. Ao iniciar o novo ciclo, zera `tentativas_ciclo`, preserva `tentativas_total` e encaminha para o Chef, seguido de nova revisão pelo SubChef.
+2. **Retomar:** registra primeiro a atualização autorizada. Ao iniciar o novo ciclo, zera `revision_count`, preserva `total_attempts` e `recipe_version`, e encaminha para o Chef, seguido de nova revisão pelo SubChef.
 3. **Encerrar:** registra a decisão e finaliza a execução sem chamar o LLM apenas para confirmar o encerramento.
 
 Retomar não significa aprovar manualmente a receita nem pular diretamente para o Cozinheiro. A proposta anterior, a crítica e as informações adicionadas devem continuar disponíveis ao Chef.
 
 O controle de versão deve proteger as atualizações do estado:
 
-* A solicitação informa `expected_version` e a aplicação consulta a versão persistida.
-* Quando as versões coincidem, a aplicação aplica a alteração e incrementa `version`.
+* A solicitação informa `expected_state_version` e a aplicação consulta `state_version`.
+* Quando as versões coincidem, a aplicação aplica a alteração e a persistência incrementa `state_version` atomicamente.
 * Quando divergem, a aplicação devolve um conflito explícito, sem sobrescrever o estado atual. O solicitante deve recuperar o estado atualizado antes de decidir uma nova atualização.
 * Comparar a versão e gravar a mudança deve constituir uma operação atômica, isto é, protegida para que outra atualização não se intercale entre a conferência e a gravação. Uma comparação isolada em Python seguida de uma gravação desprotegida não cumpre esse requisito.
 * Os caminhos que alteram os mesmos dados protegidos, incluindo a retomada e a integração MCP futura, devem usar a mesma regra de persistência e versionamento.
@@ -270,10 +273,10 @@ A resposta reúne receita, aviso informativo de saúde, imagem quando disponíve
 * O fluxo cria uma proposta, recebe revisão, respeita o limite por ciclo e segue para aprovação ou Impasse.
 * O Chef recebe a entrada do usuário pelo estado; os nós permanecem funções da aplicação coordenadas pelo LangGraph.
 * O usuário pode salvar informações enquanto o fluxo está pausado sem chamar o LLM.
-* A retomada explícita preserva o contexto e `tentativas_total`, reinicia apenas `tentativas_ciclo` e volta ao Chef e ao SubChef.
+* A retomada explícita preserva o contexto e `total_attempts`, reinicia apenas `revision_count` e volta ao Chef e ao SubChef.
 * A decisão de encerrar é registrada e respeitada.
 * O armazenamento persistente permite recuperar a mesma conversa após reiniciar a aplicação.
-* Atualizações com `expected_version` desatualizada são rejeitadas sem sobrescrita. A proteção continua válida para atualizações concorrentes.
+* Atualizações com `expected_state_version` desatualizada são rejeitadas sem sobrescrita. A proteção continua válida para atualizações concorrentes.
 * A receita final respeita os recursos autorizados. Substituições exigem autorização do usuário e nova revisão antes da finalização.
 * O aviso de saúde permanece separado da receita e não aprova, reprova, bloqueia ou modifica o fluxo.
 * O RAG e a pesquisa web preservam a origem dos resultados; o aviso apresenta as fontes utilizadas e reconhece evidência insuficiente.

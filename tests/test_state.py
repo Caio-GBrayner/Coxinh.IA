@@ -1,3 +1,5 @@
+import pytest
+
 from src.state import criar_estado_inicial
 
 
@@ -12,7 +14,7 @@ def test_estado_inicial_preserva_entrada_e_define_controles():
     assert estado["messages"][0].content == pedido
     assert estado["messages"][0].type == "human"
 
-    assert estado["version"] == 0
+    assert estado["recipe_version"] == 0
     assert estado["revision_count"] == 0
     assert estado["total_attempts"] == 0
     assert estado["max_revisions"] == 2
@@ -20,6 +22,25 @@ def test_estado_inicial_preserva_entrada_e_define_controles():
 
     assert estado["state_version"] == 0
     assert estado["state_schema_version"] == 1
+    assert estado["ingredientes_autorizados"] is None
+    assert estado["utensilios_autorizados"] is None
+    assert estado["meios_preparo_autorizados"] is None
+
+
+def test_limite_de_revisoes_pode_ser_configurado():
+    estado = criar_estado_inicial(
+        "Pedido",
+        "conversa-1",
+        max_revisions=3,
+    )
+
+    assert estado["max_revisions"] == 3
+
+
+@pytest.mark.parametrize("max_revisions", [0, -1, True])
+def test_limite_de_revisoes_invalido_e_rejeitado(max_revisions):
+    with pytest.raises(ValueError, match="positive integer"):
+        criar_estado_inicial("Pedido", "conversa-1", max_revisions=max_revisions)
 
 
 def test_conversas_nao_compartilham_listas_e_dicionarios():

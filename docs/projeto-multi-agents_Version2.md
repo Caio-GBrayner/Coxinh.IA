@@ -66,12 +66,13 @@ A etapa de imagem pode ocorrer antes ou depois do aviso de saúde. Neste projeto
 
 Uma interpretação simples e explícita:
 
-- `version = 1`: primeira proposta do Chef;
-- cada retorno do SubChef ao Chef incrementa `version` e `revision_count`;
-- `max_revisions = 2`: permite duas revisões após a primeira proposta, totalizando até três versões;
+- `recipe_version = 0`: estado inicial, antes de o Chef criar uma proposta; a primeira proposta passa a ser a versão `1`;
+- `revision_count`: quantidade de revisões do Chef feitas no ciclo atual; só aumenta quando uma rejeição permite retornar ao Chef;
+- `max_revisions = 2`: permite duas revisões após a proposta inicial, totalizando até três propostas;
+- cada decisão válida do SubChef incrementa `total_attempts`;
 - quando `revision_count == max_revisions` e a proposta ainda for rejeitada, o fluxo pausa no Impasse e aguarda o usuário.
 
-Assim, `version` representa a versão da proposta, e `revision_count` conta apenas as revisões feitas pelo Chef. A adição de um ingrediente pelo usuário pode iniciar um novo ciclo de revisão, sem apagar o histórico anterior.
+Assim, `recipe_version` representa a versão da proposta, e `revision_count` conta apenas as revisões feitas pelo Chef. A adição de um ingrediente pelo usuário pode iniciar um novo ciclo de revisão: zerar `revision_count`, preservar `total_attempts` e manter `recipe_version` crescente, sem apagar o histórico anterior.
 
 ## 4. Nós do LangGraph
 
@@ -275,15 +276,16 @@ class ReceitaState(TypedDict, total=False):
 
     # Receita e revisões
     coxinha: CoxinhaStructure
-    version: int
+    recipe_version: int
     revision_count: int
+    total_attempts: int
     max_revisions: int
     status: Literal[
         "in_revision",
         "approved",
-        "rejected",
         "awaiting_user",
         "completed",
+        "cancelled",
         "error"
     ]
     critique: str
@@ -306,8 +308,8 @@ class ReceitaState(TypedDict, total=False):
     image_status: Optional[str]
 
     # Controle de versão e execução
+    state_version: int
     state_schema_version: int
-    expected_version: Optional[int]
     last_error: Optional[str]
 
     # Resultado
@@ -319,6 +321,9 @@ class ReceitaState(TypedDict, total=False):
 - `messages` guarda as mensagens necessárias para a conversa; `add_messages` é uma forma comum de acumular mensagens no LangGraph.
 - Os campos estruturados (`coxinha`, `critique`, `revision_count`) devem ser a referência principal do fluxo. Não se deve depender apenas de procurar informações no histórico de mensagens.
 - `thread_id` identifica a conversa e permite recuperar seu checkpoint.
+- `recipe_version` identifica a proposta atual; começa em `0` e é incrementada pelo Chef ao criar uma proposta.
+- `revision_count` conta retornos ao Chef no ciclo atual; `total_attempts` conta as avaliações válidas do SubChef na conversa.
+- `state_version` é a versão do registro persistido e deve ser atualizada atomicamente pela camada de persistência. A versão esperada deve acompanhar o pedido de atualização, não ser tratada como parte durável do estado.
 - Não guardar o arquivo binário da imagem no estado. Guardar a URL ou uma referência ao armazenamento.
 - `state_schema_version` ajuda a identificar mudanças futuras no formato do estado.
 - O checkpoint pode conter texto do usuário. Definam quais dados serão persistidos e enviados ao Langfuse.
@@ -340,7 +345,7 @@ Fluxo proposto:
 
 **Importante:** adicionar o ingrediente ao estado não exige uma chamada ao LLM. A chamada ao Chef só acontece quando o fluxo retoma e precisa produzir a nova versão da receita. O checkpoint preserva os dados; ele não elimina a necessidade de chamar o modelo para gerar uma revisão.
 
-Também é possível tratar a adição de ingrediente como o início de um novo ciclo de revisão: manter a versão e o histórico antigos, zerar `revision_count` para o novo ciclo e registrar o motivo da retomada.
+Também é possível tratar a adição de ingrediente como o início de um novo ciclo de revisão: manter `recipe_version` e o histórico antigos, zerar `revision_count` para o novo ciclo e registrar o motivo da retomada.
 
 ### Checkpoints
 
@@ -379,7 +384,7 @@ Preferências: {user_preferences}
 Versão anterior: {coxinha}
 Crítica do SubChef: {critique}
 Resumo relevante da conversa: {conversation_summary}
-Número da nova versão: {version}
+Número da nova versão: {recipe_version}
 ```
 
 **Formato de saída sugerido:**
@@ -413,7 +418,7 @@ Se uma informação necessária não estiver disponível, declare a incerteza.
 Receita proposta: {coxinha}
 Regras de revisão: {review_rules}
 Resultado da validação de ingredientes: {ingredient_validation}
-Versão: {version}
+Versão da receita: {recipe_version}
 ```
 
 **Formato de saída sugerido:**
@@ -605,15 +610,16 @@ A chave deve representar a entrada da operação. Não incluir valores aleatóri
 
 ### Conflito de versão
 
-Um conflito pode ocorrer se o usuário enviar duas atualizações baseadas na mesma versão da receita, ou se houver duas execuções concorrentes da mesma conversa.
+Um conflito pode ocorrer se o usuário enviar duas atualizações baseadas na mesma versão persistida do estado, ou se houver duas execuções concorrentes da mesma conversa.
 
 Campos sugeridos:
 
-- `version`: versão atual da receita;
-- `expected_version`: versão que a atualização do usuário esperava encontrar;
+- `state_version`: versão atual do registro persistido;
+- `expected_state_version`: versão que o pedido de atualização esperava encontrar; é metadado do pedido, não do estado persistido;
+- `recipe_version`: versão da proposta de receita;
 - `state_schema_version`: versão do formato técnico do estado.
 
-Antes de aplicar uma atualização, comparar `expected_version` com a versão atual. Se houver divergência, não sobrescrever silenciosamente os dados: recarregar o estado recente e pedir confirmação ou combinar as alterações de forma explícita.
+Antes de aplicar uma atualização, comparar `expected_state_version` com `state_version`. Se houver divergência, não sobrescrever silenciosamente os dados: recarregar o estado recente e pedir confirmação ou combinar as alterações de forma explícita. A comparação e a gravação devem ser atômicas.
 
 A implementação concreta de concorrência depende do armazenamento escolhido. Esses campos ajudam a tornar a regra explícita, mas não substituem controle transacional quando múltiplas gravações concorrentes forem possíveis.
 
