@@ -1,105 +1,107 @@
+from typing import Literal
 import pytest
 
-from src.graph.routing import registrar_avaliacao_subchef, route_after_subchef
-from src.schemas import AvaliacaoSubchef
-from src.state import criar_estado_inicial
+from src.graph.routing import record_subchef_evaluation, route_after_subchef
+from src.schemas import SubChefEvaluation
+from src.state import RecipeState, create_initial_state
 
 
-def estado_com_avaliacao(decision: str, max_revisions: int = 2):
-    estado = criar_estado_inicial("Quero uma coxinha criativa.", "thread-1")
-    estado["max_revisions"] = max_revisions
-    estado["avaliacao"] = AvaliacaoSubchef(
+def state_with_evaluation(
+    decision: Literal["approved", "rejected"],
+    max_revisions: int = 2,
+) -> RecipeState:
+    state = create_initial_state("I want a creative coxinha.", "thread-1")
+    state["max_revisions"] = max_revisions
+    state["subchef_evaluation"] = SubChefEvaluation(
         decision=decision,
-        critique="Rever a proposta." if decision == "rejected" else "",
+        critique="Revise the proposal." if decision == "rejected" else "",
     )
-    return estado
+    return state
 
 
-def test_aprovacao_encaminha_ao_cozinheiro_e_conta_avaliacao():
-    estado = estado_com_avaliacao("approved", max_revisions=1)
+def test_approval_routes_to_cook_and_counts_review():
+    state = state_with_evaluation("approved", max_revisions=1)
 
-    atualizado = registrar_avaliacao_subchef(estado)
+    updated = record_subchef_evaluation(state)
 
-    assert atualizado["revision_count"] == 0
-    assert atualizado["total_attempts"] == 1
-    assert atualizado["status"] == "approved"
-    assert route_after_subchef(atualizado) == "cook"
-
-
-def test_rejeicao_antes_do_limite_volta_ao_chef():
-    estado = estado_com_avaliacao("rejected", max_revisions=2)
-
-    atualizado = registrar_avaliacao_subchef(estado)
-
-    assert atualizado["revision_count"] == 1
-    assert atualizado["total_attempts"] == 1
-    assert atualizado["status"] == "in_revision"
-    assert route_after_subchef(atualizado) == "chef"
+    assert updated["revision_count"] == 1
+    assert updated["total_attempts"] == 1
+    assert updated["status"] == "approved"
+    assert route_after_subchef(updated) == "cook"
 
 
-def test_rejeicao_no_limite_encaminha_ao_impasse():
-    estado = estado_com_avaliacao("rejected", max_revisions=1)
-    primeira_revisao = registrar_avaliacao_subchef(estado)
-    segunda_avaliacao = {
-        **primeira_revisao,
-        "avaliacao": AvaliacaoSubchef(
+def test_rejection_with_revisions_remaining_routes_to_chef():
+    state = state_with_evaluation("rejected", max_revisions=2)
+
+    updated = record_subchef_evaluation(state)
+
+    assert updated["revision_count"] == 1
+    assert updated["total_attempts"] == 1
+    assert updated["status"] == "in_revision"
+    assert route_after_subchef(updated) == "chef"
+
+
+def test_rejection_on_last_allowed_attempt_routes_to_impasse():
+    state = state_with_evaluation("rejected", max_revisions=1)
+    updated = record_subchef_evaluation(state)
+
+    assert updated["revision_count"] == 1
+    assert updated["total_attempts"] == 1
+    assert updated["status"] == "awaiting_user"
+    assert route_after_subchef(updated) == "impasse"
+
+
+def test_two_review_attempts_are_allowed_before_impasse():
+    state = state_with_evaluation("rejected", max_revisions=2)
+    first_review = record_subchef_evaluation(state)
+    second_review: RecipeState = {
+        **first_review,
+        "subchef_evaluation": SubChefEvaluation(
             decision="rejected",
-            critique="A proposta ainda precisa de ajustes.",
+            critique="The proposal still needs revision.",
         ),
     }
+    updated = record_subchef_evaluation(second_review)
 
-    atualizado = registrar_avaliacao_subchef(segunda_avaliacao)
-
-    assert atualizado["revision_count"] == 1
-    assert atualizado["total_attempts"] == 2
-    assert atualizado["status"] == "awaiting_user"
-    assert route_after_subchef(atualizado) == "impasse"
-
-
-def test_duas_revisoes_sao_permitidas_antes_do_impasse():
-    estado = estado_com_avaliacao("rejected", max_revisions=2)
-    primeira_avaliacao = registrar_avaliacao_subchef(estado)
-    segunda_avaliacao = registrar_avaliacao_subchef(primeira_avaliacao)
-    terceira_avaliacao = registrar_avaliacao_subchef(segunda_avaliacao)
-
-    assert segunda_avaliacao["revision_count"] == 2
-    assert route_after_subchef(segunda_avaliacao) == "chef"
-    assert terceira_avaliacao["revision_count"] == 2
-    assert terceira_avaliacao["total_attempts"] == 3
-    assert route_after_subchef(terceira_avaliacao) == "impasse"
+    assert first_review["revision_count"] == 1
+    assert first_review["total_attempts"] == 1
+    assert route_after_subchef(first_review) == "chef"
+    assert updated["revision_count"] == 2
+    assert updated["total_attempts"] == 2
+    assert route_after_subchef(updated) == "impasse"
 
 
-def test_aprovacao_na_ultima_tentativa_ainda_encaminha_ao_cozinheiro():
-    estado = estado_com_avaliacao("approved", max_revisions=2)
-    estado["revision_count"] = 2
-    estado["total_attempts"] = 2
+def test_approval_on_last_allowed_attempt_still_routes_to_cook():
+    state = state_with_evaluation("approved", max_revisions=2)
+    state["revision_count"] = 1
+    state["total_attempts"] = 1
 
-    atualizado = registrar_avaliacao_subchef(estado)
+    updated = record_subchef_evaluation(state)
 
-    assert atualizado["revision_count"] == 2
-    assert atualizado["total_attempts"] == 3
-    assert route_after_subchef(atualizado) == "cook"
+    assert updated["revision_count"] == 2
+    assert updated["total_attempts"] == 2
+    assert route_after_subchef(updated) == "cook"
 
 
-def test_falha_sem_avaliacao_nao_consume_tentativa():
-    estado = criar_estado_inicial("Pedido", "thread-1")
+def test_missing_evaluation_does_not_consume_attempt():
+    state = create_initial_state("Request", "thread-1")
 
     with pytest.raises(TypeError, match="valid SubChef evaluation"):
-        registrar_avaliacao_subchef(estado)
+        record_subchef_evaluation(state)
 
-    assert estado["revision_count"] == 0
-    assert estado["total_attempts"] == 0
+    assert state["revision_count"] == 0
+    assert state["total_attempts"] == 0
 
 
-def test_nao_registra_avaliacao_em_estado_que_nao_esta_em_revisao():
-    estado = estado_com_avaliacao("rejected")
-    estado["status"] = "awaiting_user"
+def test_evaluation_cannot_be_recorded_outside_review_status():
+    state = state_with_evaluation("rejected")
+    state["status"] = "awaiting_user"
 
     with pytest.raises(ValueError, match="workflow is in review"):
-        registrar_avaliacao_subchef(estado)
+        record_subchef_evaluation(state)
 
-    assert estado["revision_count"] == 0
-    assert estado["total_attempts"] == 0
+    assert state["revision_count"] == 0
+    assert state["total_attempts"] == 0
 
 
 @pytest.mark.parametrize(
@@ -110,20 +112,21 @@ def test_nao_registra_avaliacao_em_estado_que_nao_esta_em_revisao():
         ("max_revisions", 0),
         ("max_revisions", -1),
         ("revision_count", 3),
+        ("revision_count", 2),
     ],
 )
-def test_contadores_invalidos_sao_rejeitados(field, value):
-    estado = estado_com_avaliacao("rejected")
-    estado[field] = value
+def test_invalid_counters_are_rejected(field, value):
+    state = state_with_evaluation("rejected")
+    state[field] = value
 
     with pytest.raises(ValueError):
-        registrar_avaliacao_subchef(estado)
+        record_subchef_evaluation(state)
 
 
-def test_estado_original_nao_e_mutado_ao_registrar_avaliacao():
-    estado = estado_com_avaliacao("rejected")
+def test_recording_evaluation_does_not_mutate_original_state():
+    state = state_with_evaluation("rejected")
 
-    registrar_avaliacao_subchef(estado)
+    record_subchef_evaluation(state)
 
-    assert estado["revision_count"] == 0
-    assert estado["total_attempts"] == 0
+    assert state["revision_count"] == 0
+    assert state["total_attempts"] == 0
