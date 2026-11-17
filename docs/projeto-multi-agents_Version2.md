@@ -67,12 +67,12 @@ A etapa de imagem pode ocorrer antes ou depois do aviso de saúde. Neste projeto
 Uma interpretação simples e explícita:
 
 - `recipe_version = 0`: estado inicial, antes de o Chef criar uma proposta; a primeira proposta passa a ser a versão `1`;
-- `revision_count`: quantidade de revisões do Chef feitas no ciclo atual; só aumenta quando uma rejeição permite retornar ao Chef;
-- `max_revisions = 2`: permite duas revisões após a proposta inicial, totalizando até três propostas;
-- cada decisão válida do SubChef incrementa `total_attempts`;
-- quando `revision_count == max_revisions` e a proposta ainda for rejeitada, o fluxo pausa no Impasse e aguarda o usuário.
+- `revision_count`: quantidade de avaliações válidas do SubChef no ciclo atual;
+- `max_revisions = 2`: limite de duas propostas avaliadas no ciclo atual, incluindo a proposta inicial;
+- cada decisão válida do SubChef incrementa `revision_count` e `total_attempts`;
+- quando a proposta é rejeitada na última tentativa permitida, o fluxo pausa no Impasse e aguarda o usuário; uma aprovação na última tentativa segue para o Cozinheiro.
 
-Assim, `recipe_version` representa a versão da proposta, e `revision_count` conta apenas as revisões feitas pelo Chef. A adição de um ingrediente pelo usuário pode iniciar um novo ciclo de revisão: zerar `revision_count`, preservar `total_attempts` e manter `recipe_version` crescente, sem apagar o histórico anterior.
+Assim, `recipe_version` representa a versão da proposta, e `revision_count` conta as avaliações feitas no ciclo atual. A adição de um ingrediente pelo usuário pode iniciar um novo ciclo de revisão: zerar `revision_count`, preservar `total_attempts` e manter `recipe_version` crescente, sem apagar o histórico anterior. O nome `max_revisions` permanece por compatibilidade com o estado atual, embora o limite conte avaliações, não apenas revisões.
 
 ## 4. Nós do LangGraph
 
@@ -247,82 +247,55 @@ def summarize_conversation(messages):
     """Cria um resumo de contexto, se necessário, sem substituir o estado estruturado."""
 ```
 
-## 6. Estado do LangGraph (`ReceitaState`)
+## 6. Estado do LangGraph (`RecipeState`)
 
 O estado deve guardar dados suficientes para retomar o fluxo sem depender da memória implícita do modelo.
 
 Exemplo conceitual:
 
 ```python
-from typing import Annotated, Literal, Optional, TypedDict
+from typing import Annotated, Any, Literal, Required, TypedDict
 from langgraph.graph.message import add_messages
+from src.schemas import Recipe, SubChefEvaluation
 
-class CoxinhaStructure(TypedDict, total=False):
-    massa: str
-    recheio: str
-    ingredientes: list[str]
-    modo_de_preparo: str
-
-class ReceitaState(TypedDict, total=False):
-    # Identificação da conversa e entrada
-    thread_id: str
-    raw_input: str
-    messages: Annotated[list, add_messages]
-    user_preferences: dict
-
-    # Atualizações explícitas do usuário
-    ingredient_additions: list[str]
-    user_action: Optional[str]
-
-    # Receita e revisões
-    coxinha: CoxinhaStructure
-    recipe_version: int
-    revision_count: int
-    total_attempts: int
-    max_revisions: int
-    status: Literal[
-        "in_revision",
-        "approved",
-        "awaiting_user",
-        "completed",
-        "cancelled",
-        "error"
+class RecipeState(TypedDict, total=False):
+    thread_id: Required[str]
+    raw_input: Required[str]
+    messages: Required[Annotated[list, add_messages]]
+    user_preferences: Required[dict[str, Any]]
+    authorized_ingredients: Required[list[str] | None]
+    authorized_utensils: Required[list[str] | None]
+    authorized_preparation_methods: Required[list[str] | None]
+    ingredient_additions: Required[list[str]]
+    user_guidance: Required[str | None]
+    user_action: Required[Literal["save", "resume", "cancel"] | None]
+    recipe: Recipe
+    subchef_evaluation: SubChefEvaluation
+    recipe_version: Required[int]
+    revision_count: Required[int]
+    total_attempts: Required[int]
+    max_revisions: Required[int]
+    status: Required[
+        Literal[
+            "in_revision",
+            "approved",
+            "awaiting_user",
+            "completed",
+            "cancelled",
+            "error",
+        ]
     ]
-    critique: str
-    review_evidence: list[dict]
-
-    # Cozinheiro
-    recipe_steps: Optional[str]
-    image_prompt: Optional[str]
-
-    # RAG e aviso de saúde
-    retrieved_health_context: list[dict]
-    health_warning: Optional[str]
-    health_sources: list[dict]
-    health_uncertainty: Optional[str]
-
-    # Imagem e idempotência
-    recipe_hash: Optional[str]
-    idempotency_key: Optional[str]
-    image_url: Optional[str]
-    image_status: Optional[str]
-
-    # Controle de versão e execução
-    state_version: int
-    state_schema_version: int
-    last_error: Optional[str]
-
-    # Resultado
-    final_response: Optional[dict]
+    state_version: Required[int]
+    state_schema_version: Required[int]
 ```
 
 ### Observações sobre o estado
 
 - `messages` guarda as mensagens necessárias para a conversa; `add_messages` é uma forma comum de acumular mensagens no LangGraph.
-- Os campos estruturados (`coxinha`, `critique`, `revision_count`) devem ser a referência principal do fluxo. Não se deve depender apenas de procurar informações no histórico de mensagens.
+- Os campos estruturados (`recipe`, `subchef_evaluation`, `revision_count`) devem ser a referência principal do fluxo. Não se deve depender apenas de procurar informações no histórico de mensagens.
 - `thread_id` identifica a conversa e permite recuperar seu checkpoint.
 - `recipe_version` identifica a proposta atual; começa em `0` e é incrementada pelo Chef ao criar uma proposta.
-- `revision_count` conta retornos ao Chef no ciclo atual; `total_attempts` conta as avaliações válidas do SubChef na conversa.
+- `revision_count` conta as avaliações válidas do SubChef no ciclo atual; `total_attempts` conta as avaliações válidas do SubChef na conversa.
 - `state_version` é a versão do registro persistido e deve ser atualizada atomicamente pela camada de persistência. A versão esperada deve acompanhar o pedido de atualização, não ser tratada como parte durável do estado.
 - Não guardar o arquivo binário da imagem no estado. Guardar a URL ou uma referência ao armazenamento.
 - `state_schema_version` ajuda a identificar mudanças futuras no formato do estado.
@@ -391,11 +364,13 @@ Número da nova versão: {recipe_version}
 
 ```json
 {
-  "massa": "...",
-  "recheio": "...",
-  "ingredientes": ["..."],
-  "modo_de_preparo": "...",
-  "resumo_da_revisao": "..."
+  "dough": "...",
+  "filling": "...",
+  "ingredients": ["..."],
+  "preparation": "...",
+  "utensils": ["..."],
+  "preparation_methods": ["..."],
+  "revision_summary": null
 }
 ```
 

@@ -58,15 +58,15 @@ Os nós continuam sendo funções da aplicação, coordenadas pelo LangGraph. O 
 
 | Função MCP | Objetivo | Onde será usada | Construção e integração |
 | --- | --- | --- | --- |
-| `buscar_conhecimento` | Recuperar trechos da base RAG com metadados e referências das fontes. | Chef, SubChef e Agente de Saúde, quando precisarem de contexto. | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
-| `pesquisar_web` | Consultar fontes na internet e devolver resultados com origem identificável. | Chef, SubChef e Agente de Saúde, quando a consulta for necessária. | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
-| `validar_recursos_receita` | Comparar a proposta com os ingredientes, utensílios e meios de preparo autorizados pelo usuário; apontar divergências e substituições. | SubChef e Cozinheiro, antes de finalizar a receita. | Lógica na etapa 2; uso nas etapas 4 e 7; exposição MCP na etapa 10. |
-| `gerar_imagem_coxinha` | Enviar à API de imagem um prompt fiel à receita final, incluindo ingredientes, cores, texturas, formato e modo de preparo. | Cozinheiro, após consolidar a receita e a descrição visual. | Implementação e integração na etapa 10. |
-| `registrar_decisao_impasse` | Registrar a ação humana, os ingredientes ou orientações adicionados e a versão esperada do estado. | Aplicação, a partir da interação do usuário enquanto o fluxo estiver no Impasse. | Lógica na etapa 6; exposição MCP na etapa 10; acionamento pela interface na etapa 11. |
+| `search_knowledge` | Recuperar trechos da base RAG com metadados e referências das fontes. | Chef, SubChef e Agente de Saúde, quando precisarem de contexto. | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
+| `search_web` | Consultar fontes na internet e devolver resultados com origem identificável. | Chef, SubChef e Agente de Saúde, quando a consulta for necessária. | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
+| `validate_recipe_resources` | Comparar a proposta com os ingredientes, utensílios e meios de preparo autorizados pelo usuário; apontar divergências e substituições. | SubChef e Cozinheiro, antes de finalizar a receita. | Lógica na etapa 2; uso nas etapas 4 e 7; exposição MCP na etapa 10. |
+| `generate_coxinha_image` | Enviar à API de imagem um prompt fiel à receita final, incluindo ingredientes, cores, texturas, formato e modo de preparo. | Cozinheiro, após consolidar a receita e a descrição visual. | Implementação e integração na etapa 10. |
+| `record_impasse_decision` | Registrar a ação humana, os ingredientes ou orientações adicionados e a versão esperada do estado. | Aplicação, a partir da interação do usuário enquanto o fluxo estiver no Impasse. | Lógica na etapa 6; exposição MCP na etapa 10; acionamento pela interface na etapa 11. |
 
 As funções de consulta recebem os dados relevantes do estado para montar a busca. Elas devolvem contexto ao nó que as chamou; não precisam carregar a responsabilidade de manter a conversa inteira. Usar uma ferramenta em três nós não significa executá-la obrigatoriamente três vezes em toda receita.
 
-`registrar_decisao_impasse` deve ser acionada pela aplicação a partir de uma ação humana identificada, não por uma decisão autônoma do LLM. Sua implementação deve reutilizar o serviço de atualização persistente da etapa 6, evitando criar uma segunda cópia independente do estado no servidor MCP.
+`record_impasse_decision` deve ser acionada pela aplicação a partir de uma ação humana identificada, não por uma decisão autônoma do LLM. Sua implementação deve reutilizar o serviço de atualização persistente da etapa 6, evitando criar uma segunda cópia independente do estado no servidor MCP.
 
 ## 4. Passo a passo das entregas
 
@@ -89,9 +89,9 @@ As funções de consulta recebem os dados relevantes do estado para montar a bus
 O estado deve distinguir:
 
 * `recipe_version`: número da proposta de receita; começa em `0` antes da primeira proposta e avança quando o Chef cria uma nova versão.
-* `revision_count`: quantidade de revisões do Chef feitas no ciclo atual. Só aumenta quando uma rejeição permite retornar ao Chef.
+* `revision_count`: quantidade de avaliações válidas do SubChef no ciclo atual.
 * `total_attempts`: quantidade de avaliações válidas do SubChef na conversa, incluindo ciclos anteriores.
-* `max_revisions`: quantidade máxima de revisões do Chef permitidas por ciclo; não inclui a proposta inicial.
+* `max_revisions`: limite de avaliações válidas do SubChef no ciclo atual, incluindo a proposta inicial.
 * `state_version`: versão do registro persistido, atualizada atomicamente pela camada de persistência.
 * `state_schema_version`: versão do formato técnico do estado.
 
@@ -107,19 +107,19 @@ O estado deve distinguir:
 
 **Code:** implementa regras que não precisam de LLM: limite de revisões, contadores, estados possíveis e decisão de para onde o fluxo segue. A versão da receita é atualizada quando o Chef cria uma proposta; a versão concorrente do estado é atualizada atomicamente pela persistência. Implementa também a lógica de `validar_recursos_receita`, inicialmente como serviço local.
 
-Para evitar ambiguidade na contagem, `max_revisions = 2` permite a proposta inicial mais duas revisões, totalizando até três propostas avaliadas:
+Para evitar ambiguidade na contagem, `max_revisions = 2` permite avaliar até duas propostas naquele ciclo:
 
-1. Cada decisão válida do SubChef incrementa `total_attempts` uma vez.
-2. Se a proposta for aprovada, o fluxo segue para o Cozinheiro, mesmo após o limite de revisões ter sido usado.
-3. Se for rejeitada e `revision_count < max_revisions`, incrementa `revision_count` e retorna ao Chef.
-4. Se for rejeitada quando `revision_count == max_revisions`, o fluxo vai para o Impasse; não incrementa `revision_count`.
+1. Cada decisão válida do SubChef incrementa `revision_count` e `total_attempts` uma vez.
+2. Se a proposta for aprovada, o fluxo segue para o Cozinheiro, inclusive na última tentativa permitida.
+3. Se for rejeitada e ainda houver tentativas, o fluxo retorna ao Chef.
+4. Se for rejeitada na última tentativa permitida, o fluxo vai para o Impasse.
 5. Uma falha técnica não é uma decisão válida e não incrementa nenhum contador.
 
-O limite é configurável. Ao iniciar um novo ciclo após uma retomada explícita na etapa 6, zerar `revision_count`, preservar `total_attempts` e manter `recipe_version` crescente.
+O limite é configurável. Ao iniciar um novo ciclo após uma retomada explícita na etapa 6, zerar `revision_count`, preservar `total_attempts` e manter `recipe_version` crescente. O nome `max_revisions` permanece por compatibilidade com o estado atual, embora o limite conte avaliações, não apenas revisões.
 
-A validação de recursos compara a receita com o pedido autorizado vigente, incluindo alterações feitas pelo usuário no Impasse. O contrato deve deixar explícito como identificar ingredientes, utensílios e meios de preparo, para que a comparação não dependa de interpretar uma justificativa em texto livre.
+A validação compara as listas estruturadas de ingredientes, utensílios e métodos de preparo da receita com as listas autorizadas. A comparação é exata após normalizar Unicode, caixa e espaços; não tenta inferir sinônimos nem extrair recursos do texto de preparo. Uma categoria autorizada como `None` não foi informada e fica não verificada; uma lista vazia significa que nenhum recurso daquela categoria foi autorizado. Adições de ingredientes do usuário autorizam esses ingredientes e também devem aparecer na receita.
 
-**Reviewer:** verifica aprovação na última proposta permitida, rejeição com revisão disponível, rejeição após esgotar as revisões, valores inválidos e fidelidade aos recursos autorizados. Confirma que a decisão de roteamento usa campos estruturados e que uma falha técnica não é contabilizada como reprovação.
+**Reviewer:** verifica aprovação na última proposta permitida, rejeição com tentativas restantes, rejeição após esgotar as tentativas, valores inválidos e fidelidade aos recursos autorizados. Confirma que a decisão de roteamento usa campos estruturados e que uma falha técnica não é contabilizada como reprovação.
 
 **Concluir quando:** os casos principais e de limite têm testes automatizados; recursos não autorizados são apontados; a aprovação sempre segue para o Cozinheiro e a rejeição após o limite segue para o Impasse.
 
@@ -135,13 +135,13 @@ A validação de recursos compara a receita com o pedido autorizado vigente, inc
 
 ### Etapa 4: Chef e SubChef
 
-**Arquivos previstos:** `src/coxinh_ia/nodes/chef.py`, `src/coxinh_ia/nodes/subchef.py` e testes.
+**Arquivos previstos:** `src/nodes/chef.py`, `src/nodes/subchef.py`, `src/graph/resource_validation.py` e testes.
 
-**Code:** implementa o Chef para criar ou revisar uma receita estruturada a partir da entrada do usuário, do contexto e da crítica anterior. Implementa o SubChef para retornar decisão, crítica e evidências no formato definido. Integra a validação de recursos da etapa 2 à revisão e usa respostas simuladas nos testes.
+**Code:** implementa o Chef para criar ou revisar uma receita estruturada a partir da entrada do usuário, das preferências, dos recursos autorizados e da crítica anterior. Incrementa `recipe_version` quando cria uma proposta. Implementa o SubChef para retornar decisão, crítica e evidências no formato definido. Integra `validate_recipe_resources` à revisão; uma violação determinística reprova a proposta antes de chamar o LLM. Usa modelos simulados nos testes.
 
-O SubChef verifica os critérios do projeto, como massa, recheio, modo de preparo e respeito ao pedido. Sua aprovação é uma aprovação da proposta dentro desses critérios, não uma liberação para consumo.
+O SubChef recebe a proposta, as regras e as autorizações estruturadas, mas não a solicitação original nem a justificativa do Chef, para reduzir ancoragem. Ele verifica critérios semânticos, como coerência mínima entre massa, recheio e preparo. Quando uma categoria de recursos não foi autorizada explicitamente, a avaliação registra que ela não foi verificada. Sua aprovação é uma aprovação da proposta dentro desses critérios, não uma liberação para consumo.
 
-**Reviewer:** verifica se a crítica é acionável, se a saída segue os schemas, se os recursos autorizados são respeitados e se os nós não confundem criatividade com fatos ou evidências.
+**Reviewer:** verifica se a crítica é acionável, se as saídas seguem os schemas, se os recursos autorizados são respeitados deterministicamente e se os nós não confundem criatividade com fatos ou evidências. Confirma que os testes usam modelos simulados e não fazem chamadas externas.
 
 **Concluir quando:** ambos os nós têm testes focados e a decisão do SubChef pode ser roteada sem analisar texto livre. Uma adição ou substituição não autorizada é identificada na revisão.
 
@@ -225,7 +225,7 @@ O Chef e o SubChef podem consultar esses serviços quando precisarem de contexto
 
 **Arquivos previstos:** `mcp_server/server.py`, cliente MCP na aplicação, armazenamento do resultado de imagem e testes das ferramentas e da chave de idempotência.
 
-**Code:** configura o servidor e o cliente MCP e expõe as cinco ferramentas previstas: `buscar_conhecimento`, `pesquisar_web`, `validar_recursos_receita`, `gerar_imagem_coxinha` e `registrar_decisao_impasse`.
+**Code:** configura o servidor e o cliente MCP e expõe as cinco ferramentas previstas: `search_knowledge`, `search_web`, `validate_recipe_resources`, `generate_coxinha_image` e `record_impasse_decision`.
 
 As implementações das etapas 2, 6 e 9 devem ser reaproveitadas. A integração MCP acrescenta contratos de entrada, saída e erro e o transporte das chamadas, sem duplicar as regras de negócio.
 
