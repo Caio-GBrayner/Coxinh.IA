@@ -1,21 +1,21 @@
-from src import config
 import pytest
 
+from src import config
 
-def test_carrega_configuracao_valida(monkeypatch):
-    """Verifica se a configuração carrega a chave e o modelo, removendo espaços das extremidades."""
+
+def test_loads_valid_configuration(monkeypatch):
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("LLM_KEY", " test-key ")
+    monkeypatch.setenv("LLM_MODEL", " test-model ")
 
-    monkeypatch.setenv("LLM_KEY", " chave-de-teste ")
-    monkeypatch.setenv("LLM_MODEL", " modelo-de-teste ")
+    result = config.load_llm_config()
 
-    resultado = config.load_llm_config()
+    assert result.api_key.get_secret_value() == "test-key"
+    assert result.model == "test-model"
 
-    assert resultado.LLM_KEY.get_secret_value() == "chave-de-teste"
-    assert resultado.LLM_MODEL == "modelo-de-teste"
 
 @pytest.mark.parametrize(
-    "variavel, valor",
+    "variable, value",
     [
         ("LLM_KEY", None),
         ("LLM_KEY", ""),
@@ -25,17 +25,15 @@ def test_carrega_configuracao_valida(monkeypatch):
         ("LLM_MODEL", "   "),
     ],
 )
-def test_rejeita_configuracao_invalida(monkeypatch, variavel, valor):
-    """Verifica se variáveis ausentes, vazias ou com apenas espaços geram ValueError identificando o campo inválido."""
+def test_rejects_invalid_configuration(monkeypatch, variable, value):
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("LLM_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
 
-    monkeypatch.setenv("LLM_KEY", "chave-de-teste")
-    monkeypatch.setenv("LLM_MODEL", "modelo-de-teste")
-
-    if valor is None:
-        monkeypatch.delenv(variavel, raising=False)
+    if value is None:
+        monkeypatch.delenv(variable, raising=False)
     else:
-        monkeypatch.setenv(variavel, valor)
+        monkeypatch.setenv(variable, value)
 
-    with pytest.raises(ValueError, match=variavel):
+    with pytest.raises(ValueError, match=variable):
         config.load_llm_config()

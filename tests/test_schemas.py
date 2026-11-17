@@ -1,111 +1,97 @@
 import pytest
 from pydantic import ValidationError
 
-from src.schemas import AvaliacaoSubchef, Receita
+from src.schemas import Recipe, SubChefEvaluation
 
 
-def test_rejeicao_sem_critica_gera_erro():
-    with pytest.raises(ValidationError, match="precisa de uma crítica"):
-        AvaliacaoSubchef(
-            decision="rejected",
-            critique="",
-        )
-
-
-def test_rejeicao_com_critica_e_valida():
-    avaliacao = AvaliacaoSubchef(
-        decision="rejected",
-        critique="O preparo usa um ingrediente não autorizado.",
-    )
-
-    assert avaliacao.decision == "rejected"
-    assert avaliacao.critique == "O preparo usa um ingrediente não autorizado."
-
-
-def dados_receita_valida():
+def valid_recipe_data():
     return {
-        "massa": "  Massa de batata  ",
-        "recheio": "Frango",
-        "ingredientes": [" batata ", " frango "],
-        "modo_de_preparo": "Modele a massa e acrescente o recheio.",
+        "dough": "Potato dough",
+        "filling": "Chicken",
+        "ingredients": ["potato", "chicken"],
+        "preparation": "Shape the dough and add the filling.",
+        "utensils": ["pot"],
+        "preparation_methods": ["boiling"],
     }
 
 
-def test_receita_valida_normaliza_textos():
-    receita = Receita(**dados_receita_valida())
+def test_recipe_normalizes_required_text():
+    data = valid_recipe_data()
+    data["dough"] = "  Potato dough  "
+    data["ingredients"] = [" potato ", " chicken "]
 
-    assert receita.massa == "Massa de batata"
-    assert receita.ingredientes == ["batata", "frango"]
-    assert receita.resumo_da_revisao is None
+    recipe = Recipe(**data)
 
-
-@pytest.mark.parametrize(
-    "campo",
-    ["massa", "recheio", "ingredientes", "modo_de_preparo"],
-)
-def test_receita_exige_campos_obrigatorios(campo):
-    dados = dados_receita_valida()
-    del dados[campo]
-
-    with pytest.raises(ValidationError) as erro:
-        Receita(**dados)
-
-    detalhe = erro.value.errors()[0]
-    assert detalhe["loc"] == (campo,)
-    assert detalhe["type"] == "missing"
+    assert recipe.dough == "Potato dough"
+    assert recipe.ingredients == ["potato", "chicken"]
+    assert recipe.revision_summary is None
 
 
 @pytest.mark.parametrize(
-    "campo, valor",
+    "field",
     [
-        ("massa", ""),
-        ("massa", "   "),
-        ("recheio", ""),
-        ("recheio", "   "),
-        ("modo_de_preparo", ""),
-        ("modo_de_preparo", "   "),
-        ("ingredientes", []),
-        ("ingredientes", [""]),
-        ("ingredientes", ["batata", "   "]),
-        ("massa", 123),
-        ("ingredientes", "batata"),
-        ("ingredientes", [123]),
+        "dough",
+        "filling",
+        "ingredients",
+        "preparation",
+        "utensils",
+        "preparation_methods",
     ],
 )
-def test_receita_rejeita_dados_invalidos(campo, valor):
-    dados = dados_receita_valida()
-    dados[campo] = valor
+def test_recipe_requires_structured_fields(field):
+    data = valid_recipe_data()
+    del data[field]
 
-    with pytest.raises(ValidationError) as erro:
-        Receita(**dados)
+    with pytest.raises(ValidationError) as error:
+        Recipe(**data)
 
-    assert erro.value.errors()[0]["loc"][0] == campo
-
-
-def test_aprovacao_aceita_critica_vazia():
-    avaliacao = AvaliacaoSubchef(
-        decision="approved",
-        critique="",
-    )
-
-    assert avaliacao.decision == "approved"
-    assert avaliacao.critique == ""
+    assert error.value.errors()[0]["loc"] == (field,)
+    assert error.value.errors()[0]["type"] == "missing"
 
 
-@pytest.mark.parametrize("critica", ["   ", "\n\t"])
-def test_rejeicao_nao_aceita_critica_so_com_espacos(critica):
-    with pytest.raises(ValidationError, match="precisa de uma crítica"):
-        AvaliacaoSubchef(
-            decision="rejected",
-            critique=critica,
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("dough", ""),
+        ("dough", "   "),
+        ("filling", ""),
+        ("preparation", "   "),
+        ("ingredients", []),
+        ("ingredients", [""]),
+        ("ingredients", ["potato", "   "]),
+        ("utensils", [""]),
+        ("preparation_methods", ["  "]),
+        ("dough", 123),
+        ("ingredients", "potato"),
+        ("ingredients", [123]),
+    ],
+)
+def test_recipe_rejects_invalid_values(field, value):
+    data = valid_recipe_data()
+    data[field] = value
+
+    with pytest.raises(ValidationError) as error:
+        Recipe(**data)
+
+    assert error.value.errors()[0]["loc"][0] == field
+
+
+def test_approved_evaluation_allows_empty_critique():
+    evaluation = SubChefEvaluation(decision="approved", critique="")
+
+    assert evaluation.decision == "approved"
+    assert evaluation.critique == ""
+
+
+def test_rejected_evaluation_requires_critique():
+    with pytest.raises(ValidationError, match="must include a critique"):
+        SubChefEvaluation(decision="rejected", critique="  ")
+
+
+def test_evaluation_rejects_unknown_decision():
+    with pytest.raises(ValidationError) as error:
+        SubChefEvaluation.model_validate(
+            {"decision": "maybe", "critique": "Still reviewing."}
         )
 
-
-def test_avaliacao_rejeita_decisao_desconhecida():
-    with pytest.raises(ValidationError) as erro:
-        AvaliacaoSubchef(
-            decision="talvez",
-            critique="Ainda estou avaliando.",
-        )
-
-    assert erro.value.errors()[0]["loc"] == ("decision",)
+    assert error.value.errors()[0]["loc"] == ("decision",)
