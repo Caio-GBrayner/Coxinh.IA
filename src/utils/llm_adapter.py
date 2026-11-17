@@ -1,10 +1,13 @@
-from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-import os
 
-load_dotenv()
+from src.config import load_llm_config
+
 
 def call_llm(temperature: float) -> ChatGroq:
+    config = load_llm_config()
 
-    return ChatGroq(api_key= os.environ["LLM_KEY"], model=os.environ["LLM_MODEL"], temperature=temperature)
-
+    return ChatGroq(
+        api_key=config.LLM_KEY.get_secret_value(),
+        model=config.LLM_MODEL,
+        temperature=temperature,
+    )

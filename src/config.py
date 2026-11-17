@@ -5,23 +5,23 @@ from pydantic import BaseModel, SecretStr
 
 
 class LLMConfig(BaseModel):
-    api_key: SecretStr
-    model: str
+    LLM_KEY: SecretStr
+    LLM_MODEL: str
 
 
 def load_llm_config() -> LLMConfig:
     load_dotenv()
 
-    api_key = os.getenv("LLM_KEY", "").strip()
-    model = os.getenv("LLM_MODEL", "").strip()
+    LLM_KEY = os.getenv("LLM_KEY", "").strip()
+    LLM_MODEL = os.getenv("LLM_MODEL", "").strip()
 
-    if not api_key:
+    if not LLM_KEY:
         raise ValueError("A variável LLM_KEY precisa estar preenchida.")
 
-    if not model:
+    if not LLM_MODEL:
         raise ValueError("A variável LLM_MODEL precisa estar preenchida.")
 
     return LLMConfig(
-        api_key=SecretStr(api_key),
-        model=model,
+        LLM_KEY=SecretStr(LLM_KEY),
+        LLM_MODEL=LLM_MODEL,
     )
