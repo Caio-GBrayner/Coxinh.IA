@@ -1,8 +1,8 @@
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
+from src.graph.prompts.subchef import SUBCHEF_PROMPT
 from src.graph.resource_validation import (
     ResourceValidationResult,
     validate_recipe_resources,
@@ -82,32 +82,12 @@ def subchef_node(state: RecipeState) -> dict[str, Any]:
             )
         }
 
-    structured_model = call_llm(SUBCHEF_TEMPERATURE).with_structured_output(
-        SubChefEvaluation
-    )
+    structured_model = SUBCHEF_PROMPT | call_llm(
+        SUBCHEF_TEMPERATURE
+    ).with_structured_output(SubChefEvaluation)
     evaluation = SubChefEvaluation.model_validate(
         structured_model.invoke(
-            [
-                SystemMessage(
-                    content=(
-                        "You are an independent reviewer of a fictional coxinha "
-                        "recipe. Review only the recipe and explicit project "
-                        "criteria; do not rely on the Chef's justification. "
-                        "Check that the proposal has understandable dough, "
-                        "filling, ingredients, preparation, utensils, and "
-                        "preparation methods, and that it is coherent enough "
-                        "to be revised or presented. Do not confuse creativity "
-                        "with factual evidence. Do not assert scientific facts "
-                        "or food safety without supporting evidence. If resource "
-                        "validation is incomplete, state that limitation in "
-                        "the evidence and do not claim those resources were "
-                        "verified. Reject with a specific, actionable critique "
-                        "when a criterion fails. Return only the requested "
-                        "structured evaluation."
-                    )
-                ),
-                HumanMessage(content=context.model_dump_json(exclude_none=True)),
-            ]
+            {"context": context.model_dump_json(exclude_none=True)}
         )
     )
 
