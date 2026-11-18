@@ -135,7 +135,7 @@ A validação compara as listas estruturadas de ingredientes, utensílios e mét
 
 ### Etapa 4: Chef e SubChef
 
-**Arquivos previstos:** `src/nodes/chef.py`, `src/nodes/subchef.py`, `src/graph/resource_validation.py` e testes.
+**Arquivos previstos:** `src/graph/nodes/chef.py`, `src/graph/nodes/subchef.py`, `src/graph/prompts/chef.py`, `src/graph/prompts/subchef.py`, `src/graph/resource_validation.py` e testes.
 
 **Code:** implementa o Chef para criar ou revisar uma receita estruturada a partir da entrada do usuário, das preferências, dos recursos autorizados e da crítica anterior. Incrementa `recipe_version` quando cria uma proposta. Implementa o SubChef para retornar decisão, crítica e evidências no formato definido. Integra `validate_recipe_resources` à revisão; uma violação determinística reprova a proposta antes de chamar o LLM. Usa modelos simulados nos testes.
 

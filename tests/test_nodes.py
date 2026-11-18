@@ -2,11 +2,27 @@ import json
 from unittest.mock import Mock
 
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableLambda
 import pytest
 
-from src.nodes import chef, subchef
+from src.graph.nodes import chef, subchef
 from src.schemas import Recipe, SubChefEvaluation
 from src.state import create_initial_state
+
+
+def mock_structured_model(monkeypatch, node, output):
+    messages = []
+
+    def invoke(prompt_value):
+        messages.extend(prompt_value.to_messages())
+        return output
+
+    structured_model = RunnableLambda(invoke)
+    chat_model = Mock()
+    chat_model.with_structured_output.return_value = structured_model
+    mocked_call_llm = Mock(return_value=chat_model)
+    monkeypatch.setattr(node, "call_llm", mocked_call_llm)
+    return chat_model, mocked_call_llm, messages
 
 
 def create_recipe():
@@ -28,12 +44,9 @@ def test_chef_returns_structured_recipe_and_increments_recipe_version(monkeypatc
     state["authorized_ingredients"] = ["potato", "chicken"]
     state["user_preferences"] = {"tone": "playful"}
 
-    structured_model = Mock()
-    structured_model.invoke.return_value = create_recipe()
-    chat_model = Mock()
-    chat_model.with_structured_output.return_value = structured_model
-    mocked_call_llm = Mock(return_value=chat_model)
-    monkeypatch.setattr(chef, "call_llm", mocked_call_llm)
+    chat_model, mocked_call_llm, messages = mock_structured_model(
+        monkeypatch, chef, create_recipe()
+    )
 
     result = chef.chef_node(state)
 
@@ -44,7 +57,6 @@ def test_chef_returns_structured_recipe_and_increments_recipe_version(monkeypatc
         "recipe_version": 1,
     }
 
-    messages = structured_model.invoke.call_args.args[0]
     context = json.loads(messages[1].content)
     assert isinstance(messages[1], HumanMessage)
     assert context["request"] == state["raw_input"]
@@ -60,15 +72,11 @@ def test_chef_includes_previous_recipe_and_rejection_critique(monkeypatch):
         critique="Include a clearer preparation method.",
     )
 
-    structured_model = Mock()
-    structured_model.invoke.return_value = create_recipe()
-    chat_model = Mock()
-    chat_model.with_structured_output.return_value = structured_model
-    monkeypatch.setattr(chef, "call_llm", Mock(return_value=chat_model))
+    _, _, messages = mock_structured_model(monkeypatch, chef, create_recipe())
 
     chef.chef_node(state)
 
-    context = json.loads(structured_model.invoke.call_args.args[0][1].content)
+    context = json.loads(messages[1].content)
     assert context["previous_recipe"]["filling"] == "Chicken"
     assert context["previous_critique"] == "Include a clearer preparation method."
     assert context["next_recipe_version"] == 1
@@ -106,12 +114,9 @@ def test_subchef_uses_structured_output_without_original_request(monkeypatch):
         critique="",
         evidence=["The structured recipe is coherent."],
     )
-    structured_model = Mock()
-    structured_model.invoke.return_value = expected_evaluation
-    chat_model = Mock()
-    chat_model.with_structured_output.return_value = structured_model
-    mocked_call_llm = Mock(return_value=chat_model)
-    monkeypatch.setattr(subchef, "call_llm", mocked_call_llm)
+    chat_model, mocked_call_llm, messages = mock_structured_model(
+        monkeypatch, subchef, expected_evaluation
+    )
 
     result = subchef.subchef_node(state)
 
@@ -119,7 +124,6 @@ def test_subchef_uses_structured_output_without_original_request(monkeypatch):
     chat_model.with_structured_output.assert_called_once_with(SubChefEvaluation)
     assert result == {"subchef_evaluation": expected_evaluation}
 
-    messages = structured_model.invoke.call_args.args[0]
     assert "Original user request" not in messages[1].content
     context = json.loads(messages[1].content)
     assert context["resource_validation"]["status"] == "passed"
@@ -129,14 +133,11 @@ def test_subchef_marks_unconfigured_resource_categories_as_unverified(monkeypatc
     state = create_initial_state("Make a coxinha.", "conversation-1")
     state["recipe"] = create_recipe()
 
-    structured_model = Mock()
-    structured_model.invoke.return_value = SubChefEvaluation(
+    expected_evaluation = SubChefEvaluation(
         decision="approved",
         critique="",
     )
-    chat_model = Mock()
-    chat_model.with_structured_output.return_value = structured_model
-    monkeypatch.setattr(subchef, "call_llm", Mock(return_value=chat_model))
+    mock_structured_model(monkeypatch, subchef, expected_evaluation)
 
     result = subchef.subchef_node(state)
     evidence = result["subchef_evaluation"].evidence
