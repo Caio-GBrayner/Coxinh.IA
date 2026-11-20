@@ -66,7 +66,7 @@ Os nós continuam sendo funções da aplicação, coordenadas pelo LangGraph. O 
 
 As funções de consulta recebem os dados relevantes do estado para montar a busca. Elas devolvem contexto ao nó que as chamou; não precisam carregar a responsabilidade de manter a conversa inteira. Usar uma ferramenta em três nós não significa executá-la obrigatoriamente três vezes em toda receita.
 
-`record_impasse_decision` deve ser acionada pela aplicação a partir de uma ação humana identificada, não por uma decisão autônoma do LLM. Sua implementação deve reutilizar o serviço de atualização persistente da etapa 6, evitando criar uma segunda cópia independente do estado no servidor MCP.
+`record_impasse_decision` deve ser acionada pela aplicação a partir de uma ação humana identificada, não por uma decisão autônoma do LLM. Sua implementação deve reutilizar o serviço de atualização do estado da etapa 6, evitando criar uma segunda cópia independente do estado no servidor MCP.
 
 ## 4. Passo a passo das entregas
 
@@ -92,10 +92,10 @@ O estado deve distinguir:
 * `revision_count`: quantidade de avaliações válidas do SubChef no ciclo atual.
 * `total_attempts`: quantidade de avaliações válidas do SubChef na conversa, incluindo ciclos anteriores.
 * `max_revisions`: limite de avaliações válidas do SubChef no ciclo atual, incluindo a proposta inicial.
-* `state_version`: versão do registro persistido, atualizada atomicamente pela camada de persistência.
+* `state_version`: versão das atualizações do fluxo; no MVP é protegida por lock em memória, e uma implantação durável deve atualizá-la atomicamente no armazenamento compartilhado.
 * `state_schema_version`: versão do formato técnico do estado.
 
-`expected_state_version` pertence ao pedido de atualização, não ao estado persistido. A camada de persistência compara esse valor com `state_version` ao salvar a alteração.
+`expected_state_version` pertence ao pedido de atualização, não ao estado. O serviço de atualização compara esse valor com `state_version` antes de aplicar a alteração.
 
 **Reviewer:** confere nomes, tipos, campos obrigatórios e se os modelos representam claramente uma proposta, uma crítica e o status do fluxo. Verifica que revisões, avaliações e versões têm responsabilidades distintas.
 
@@ -105,7 +105,7 @@ O estado deve distinguir:
 
 **Arquivos previstos:** `src/graph/routing.py`, módulo de validação de recursos ou funções equivalentes e `tests/`.
 
-**Code:** implementa regras que não precisam de LLM: limite de revisões, contadores, estados possíveis e decisão de para onde o fluxo segue. A versão da receita é atualizada quando o Chef cria uma proposta; a versão concorrente do estado é atualizada atomicamente pela persistência. Implementa também a lógica de `validar_recursos_receita`, inicialmente como serviço local.
+**Code:** implementa regras que não precisam de LLM: limite de revisões, contadores, estados possíveis e decisão de para onde o fluxo segue. A versão da receita é atualizada quando o Chef cria uma proposta; o controle concorrente de `state_version` é detalhado para a camada de atualização da etapa 6. Implementa também a lógica de `validar_recursos_receita`, inicialmente como serviço local.
 
 Para evitar ambiguidade na contagem, `max_revisions = 2` permite avaliar até duas propostas naquele ciclo:
 
@@ -147,9 +147,9 @@ O SubChef recebe a proposta, as regras e as autorizações estruturadas, mas nã
 
 ### Etapa 5: Grafo, roteamento e limite de revisões
 
-**Arquivos previstos:** `src/coxinh_ia/graph.py` e testes de integração do grafo.
+**Arquivos previstos:** `src/graph/graph.py` e testes de integração do grafo.
 
-**Code:** conecta entrada, Chef, SubChef e as rotas para revisão, aprovação ou Impasse. Aplica as regras e os contadores da etapa 2, mantendo o limite configurado por ciclo.
+**Code:** implementa `build_graph()` como construtor do grafo LangGraph e conecta entrada, Chef, SubChef e as rotas para revisão, aprovação ou Impasse. Aplica as regras e os contadores da etapa 2, mantendo o limite configurado por ciclo. Como os nós Cozinheiro e Impasse ainda não fazem parte desta etapa, aprovação e Impasse encerram a execução com o status correspondente.
 
 **Reviewer:** simula aprovação na primeira tentativa, rejeições seguidas de aprovação, aprovação na última tentativa e esgotamento do limite. Verifica que o grafo não entra em ciclo infinito nem incrementa os contadores duas vezes para a mesma decisão.
 
@@ -157,9 +157,9 @@ O SubChef recebe a proposta, as regras e as autorizações estruturadas, mas nã
 
 ### Etapa 6: Checkpoint, pausa, retomada e conflitos de versão
 
-**Arquivos previstos:** `src/coxinh_ia/checkpoint.py`, serviço de atualização do estado e registro de decisões do Impasse, ou módulos equivalentes, além dos testes de persistência e retomada.
+**Arquivos previstos:** `src/graph/impasse.py`, `src/graph/workflow.py`, integração com o checkpointer no builder e testes de pausa e retomada.
 
-**Code:** adiciona armazenamento persistente, identificador estável de conversa (`thread_id`) e pausa no Impasse. Implementa a lógica de `registrar_decisao_impasse` e separa as ações de salvar informações, retomar e encerrar.
+**Code:** para o MVP, usa `MemorySaver` e um serviço em memória limitado a uma instância da aplicação. Os checkpoints e registros de idempotência existem apenas enquanto o processo está ativo; a migração para armazenamento durável está documentada em `docs/CONTEXTO_MIGRACAO_PERSISTENCIA.md`. Usa o identificador estável de conversa (`thread_id`) e interrompe o grafo no Impasse. Implementa a lógica de `record_impasse_decision` e separa as ações de salvar informações, retomar e encerrar.
 
 O comportamento esperado é:
 
@@ -172,14 +172,13 @@ Retomar não significa aprovar manualmente a receita nem pular diretamente para 
 O controle de versão deve proteger as atualizações do estado:
 
 * A solicitação informa `expected_state_version` e a aplicação consulta `state_version`.
-* Quando as versões coincidem, a aplicação aplica a alteração e a persistência incrementa `state_version` atomicamente.
-* Quando divergem, a aplicação devolve um conflito explícito, sem sobrescrever o estado atual. O solicitante deve recuperar o estado atualizado antes de decidir uma nova atualização.
-* Comparar a versão e gravar a mudança deve constituir uma operação atômica, isto é, protegida para que outra atualização não se intercale entre a conferência e a gravação. Uma comparação isolada em Python seguida de uma gravação desprotegida não cumpre esse requisito.
-* Os caminhos que alteram os mesmos dados protegidos, incluindo a retomada e a integração MCP futura, devem usar a mesma regra de persistência e versionamento.
+* No MVP, as ações por conversa são serializadas por um lock em processo. Se as versões divergem, a aplicação devolve um conflito explícito sem aplicar a decisão.
+* Essa proteção não coordena processos ou réplicas diferentes e não sobrevive a reinícios. Antes de implantação multi-processo, comparar a versão e gravar a mudança precisa ser uma operação atômica no armazenamento compartilhado.
+* Os caminhos que alteram os mesmos dados protegidos, incluindo a retomada e a integração MCP futura, devem usar o mesmo serviço de atualização e versionamento.
 
 **Reviewer:** verifica preservação da conversa, receita e crítica; ausência de chamada ao LLM ao salvar; reinício apenas do contador do ciclo ao retomar; e encerramento explícito. Executa testes de atualização com versão antiga e de duas atualizações concorrentes baseadas na mesma versão, confirmando que não há sobrescrita silenciosa.
 
-**Concluir quando:** testes demonstram pausa, gravação sem LLM, retomada com contexto, preservação do total de tentativas e tratamento de conflitos. Um teste também encerra e recria a instância da aplicação ou do grafo usando o armazenamento persistente, comprovando a recuperação da conversa após reinício.
+**Concluir quando:** testes demonstram pausa, gravação sem LLM, retomada com contexto, preservação do total de tentativas, idempotência e tratamento de conflitos no processo atual. Recuperação após reinício e coordenação entre processos ficam para a migração descrita no arquivo de contexto.
 
 ### Etapa 7: Cozinheiro e resposta final
 

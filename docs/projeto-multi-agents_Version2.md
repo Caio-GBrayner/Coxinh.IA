@@ -296,14 +296,14 @@ class RecipeState(TypedDict, total=False):
 - `thread_id` identifica a conversa e permite recuperar seu checkpoint.
 - `recipe_version` identifica a proposta atual; começa em `0` e é incrementada pelo Chef ao criar uma proposta.
 - `revision_count` conta as avaliações válidas do SubChef no ciclo atual; `total_attempts` conta as avaliações válidas do SubChef na conversa.
-- `state_version` é a versão do registro persistido e deve ser atualizada atomicamente pela camada de persistência. A versão esperada deve acompanhar o pedido de atualização, não ser tratada como parte durável do estado.
+- `state_version` acompanha atualizações do fluxo. No MVP, o serviço em memória serializa operações por conversa; uma implantação durável deve atualizá-la atomicamente no armazenamento compartilhado. A versão esperada acompanha o pedido, não o estado.
 - Não guardar o arquivo binário da imagem no estado. Guardar a URL ou uma referência ao armazenamento.
 - `state_schema_version` ajuda a identificar mudanças futuras no formato do estado.
 - O checkpoint pode conter texto do usuário. Definam quais dados serão persistidos e enviados ao Langfuse.
 
 ## 7. Preservar contexto ao adicionar um ingrediente
 
-A persistência precisa combinar **LangGraph checkpointer** com um identificador estável de conversa, como `thread_id`.
+O MVP combina **LangGraph checkpointer em memória** com um identificador estável de conversa, como `thread_id`. O mesmo `InMemoryWorkflow` deve permanecer ativo durante o ciclo de vida da aplicação.
 
 Fluxo proposto:
 
@@ -322,10 +322,10 @@ Também é possível tratar a adição de ingrediente como o início de um novo 
 
 ### Checkpoints
 
-- Durante desenvolvimento, um checkpointer em SQLite pode ser suficiente.
-- Para uma aplicação compartilhada ou de longa duração, avaliar um checkpointer com armazenamento persistente apropriado, como PostgreSQL.
-- O checkpointer de memória é útil para testes, mas não preserva o estado após reiniciar o processo.
-- A persistência do checkpoint e a retenção de dados devem ser configuradas conscientemente.
+- O MVP usa `MemorySaver`; o checkpoint se perde quando o processo da aplicação termina.
+- O serviço em memória serializa atualizações por conversa, verifica `expected_state_version` e trata chaves de idempotência enquanto a instância está ativa.
+- Essa implementação não coordena múltiplos processos e não recupera atualizações após falhas ou reinícios.
+- A migração para banco compartilhado, transações atômicas e recuperação entre reinícios está detalhada em `docs/CONTEXTO_MIGRACAO_PERSISTENCIA.md`.
 
 A forma de pausar e retomar pode usar os mecanismos de interrupção e continuação suportados pela versão escolhida do LangGraph. A configuração concreta deve ser conferida na documentação dessa versão.
 
@@ -589,7 +589,7 @@ Um conflito pode ocorrer se o usuário enviar duas atualizações baseadas na me
 
 Campos sugeridos:
 
-- `state_version`: versão atual do registro persistido;
+- `state_version`: versão atual das atualizações do fluxo; atomicidade compartilhada é requisito para uma implantação durável;
 - `expected_state_version`: versão que o pedido de atualização esperava encontrar; é metadado do pedido, não do estado persistido;
 - `recipe_version`: versão da proposta de receita;
 - `state_schema_version`: versão do formato técnico do estado.
@@ -644,7 +644,7 @@ Componentes iniciais:
 - formulário para adicionar ingredientes quando o fluxo estiver pausado;
 - apresentação da receita, do aviso de saúde e da imagem;
 - opção de continuar ou encerrar;
-- identificação persistente da conversa, associada a um `thread_id`.
+- identificação estável da conversa, associada a um `thread_id` reutilizado durante as retomadas.
 
 A interface deve reutilizar o mesmo `thread_id` ao atualizar ou retomar uma conversa. Não criar um novo identificador a cada clique de continuação.
 
