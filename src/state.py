@@ -49,6 +49,8 @@ class RecipeState(TypedDict, total=False):
 
     recipe_hash: str | None
     idempotency_key: str | None
+    last_impasse_decision_key: str | None
+    last_impasse_decision_fingerprint: str | None
     image_url: str | None
     image_status: str | None
 
