@@ -39,6 +39,8 @@ class RecipeState(TypedDict, total=False):
     max_revisions: Required[int]
     status: Required[WorkflowStatus]
 
+    cook_output: dict[str, Any]
+    cook_resource_validation: Literal["passed", "incomplete"]
     recipe_steps: str | None
     image_prompt: str | None
 

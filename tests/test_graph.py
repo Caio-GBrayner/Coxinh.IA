@@ -7,6 +7,9 @@ from src.schemas import Recipe, SubChefEvaluation
 from src.state import RecipeState, create_initial_state
 
 
+pytestmark = pytest.mark.usefixtures("stub_cook_llm")
+
+
 def create_recipe() -> Recipe:
     """Cria uma proposta fixa para os testes do grafo."""
     return Recipe(
@@ -20,7 +23,7 @@ def create_recipe() -> Recipe:
 
 
 def build_test_graph(monkeypatch, decisions):
-    """Monta o grafo com agentes simulados e contadores de chamadas."""
+    """Monta o grafo com Chef e SubChef simulados."""
     calls = {"chef": 0, "subchef": 0}
 
     def fake_chef_node(state: RecipeState) -> dict[str, object]:
@@ -48,22 +51,32 @@ def build_test_graph(monkeypatch, decisions):
     return graph_module.build_graph(), calls
 
 
-def test_approval_on_first_attempt_ends_as_approved(monkeypatch):
-    """Verifica que aprovar na primeira avaliação encerra o fluxo."""
+def test_approval_on_first_attempt_completes_recipe(monkeypatch, stub_cook_llm):
+    """Verifica que a primeira aprovação produz uma receita finalizada."""
     workflow, calls = build_test_graph(monkeypatch, ["approved"])
     initial_state = create_initial_state("Make a coxinha.", "thread-1")
 
     result = workflow.invoke(initial_state)
 
-    assert result["status"] == "approved"
+    assert result["status"] == "completed"
+    assert result["final_response"]["recipe"]["title"] == "Crocância de Frango"
+    assert result["final_response"]["recipe"]["ingredients"] == [
+        "potato",
+        "chicken",
+    ]
+    assert result["final_response"]["recipe"]["steps"] == [
+        "Cozinhe as batatas.",
+        "Modele a massa.",
+    ]
     assert result["revision_count"] == 1
     assert result["total_attempts"] == 1
     assert result["recipe_version"] == 1
     assert calls == {"chef": 1, "subchef": 1}
+    stub_cook_llm.assert_called_once()
 
 
 def test_rejection_then_approval_revises_and_finishes(monkeypatch):
-    """Verifica que a primeira rejeição volta ao Chef para outra proposta."""
+    """Verifica que uma rejeição seguida de aprovação conclui a receita."""
     workflow, calls = build_test_graph(monkeypatch, ["rejected", "approved"])
     initial_state = create_initial_state(
         "Make a coxinha.",
@@ -73,15 +86,15 @@ def test_rejection_then_approval_revises_and_finishes(monkeypatch):
 
     result = workflow.invoke(initial_state)
 
-    assert result["status"] == "approved"
+    assert result["status"] == "completed"
     assert result["revision_count"] == 2
     assert result["total_attempts"] == 2
     assert result["recipe_version"] == 2
     assert calls == {"chef": 2, "subchef": 2}
 
 
-def test_rejection_on_last_attempt_ends_at_impasse(monkeypatch):
-    """Verifica que o grafo encerra em awaiting_user ao esgotar as avaliações."""
+def test_rejection_on_last_attempt_ends_at_impasse(monkeypatch, stub_cook_llm):
+    """Verifica que esgotar as avaliações leva ao Impasse."""
     workflow, calls = build_test_graph(monkeypatch, ["rejected", "rejected"])
     initial_state = create_initial_state(
         "Make a coxinha.",
@@ -92,14 +105,16 @@ def test_rejection_on_last_attempt_ends_at_impasse(monkeypatch):
     result = workflow.invoke(initial_state)
 
     assert result["status"] == "awaiting_user"
+    assert "final_response" not in result
     assert result["revision_count"] == 2
     assert result["total_attempts"] == 2
     assert result["recipe_version"] == 2
     assert calls == {"chef": 2, "subchef": 2}
+    stub_cook_llm.assert_not_called()
 
 
 def test_approval_on_last_attempt_is_not_blocked_by_limit(monkeypatch):
-    """Verifica que uma aprovação na última avaliação disponível é aceita."""
+    """Verifica que a aprovação na última avaliação conclui a receita."""
     workflow, calls = build_test_graph(monkeypatch, ["approved"])
     initial_state = create_initial_state(
         "Make a coxinha.",
@@ -109,14 +124,15 @@ def test_approval_on_last_attempt_is_not_blocked_by_limit(monkeypatch):
 
     result = workflow.invoke(initial_state)
 
-    assert result["status"] == "approved"
+    assert result["status"] == "completed"
     assert result["revision_count"] == 1
     assert result["total_attempts"] == 1
     assert calls == {"chef": 1, "subchef": 1}
 
 
 def test_technical_subchef_failure_does_not_record_attempt(monkeypatch):
-    """Verifica que uma falha técnica no SubChef não registra uma avaliação."""
+    """Verifica que uma falha técnica no SubChef não conta como avaliação."""
+
     def fake_chef_node(state: RecipeState) -> dict[str, object]:
         """Devolve a proposta que chega ao SubChef antes da falha."""
         return {
@@ -130,7 +146,6 @@ def test_technical_subchef_failure_does_not_record_attempt(monkeypatch):
         "subchef_node",
         Mock(side_effect=RuntimeError("LLM request failed.")),
     )
-
     record_review = Mock(wraps=graph_module.record_review_node)
     monkeypatch.setattr(graph_module, "record_review_node", record_review)
 
