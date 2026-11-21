@@ -6,8 +6,8 @@ from src.state import create_initial_state
 from test_checkpoint import create_decision, create_in_memory_workflow
 
 
-def test_retry_resume_after_chef_timeout(monkeypatch):
-    """Verifica que a retomada após timeout não reaplica a decisão do usuário."""
+def test_retry_resume_after_chef_timeout(monkeypatch, stub_cook_llm):
+    """Verifica que a retomada após timeout conclui sem reaplicar a decisão."""
     _, calls = create_in_memory_workflow(
         monkeypatch, ["rejected", "rejected", "approved"]
     )
@@ -41,14 +41,21 @@ def test_retry_resume_after_chef_timeout(monkeypatch):
     assert checkpoint["status"] == "in_revision"
     assert checkpoint["state_version"] == 1
     assert checkpoint["total_attempts"] == 2
+    stub_cook_llm.assert_not_called()
 
     result = workflow.submit_impasse_decision("thread-1", decision)
 
-    assert result["status"] == "approved"
+    assert result["status"] == "completed"
     assert result["state_version"] == 1
     assert result["recipe_version"] == 3
     assert result["revision_count"] == 1
     assert result["total_attempts"] == 3
     assert result["ingredient_additions"] == ["mushroom"]
     assert result["user_guidance"] == "Keep the filling savory."
+    assert result["final_response"]["recipe"]["ingredients"] == [
+        "potato",
+        "chicken",
+        "mushroom",
+    ]
     assert calls == {"chef": 3, "subchef": 3}
+    stub_cook_llm.assert_called_once()
