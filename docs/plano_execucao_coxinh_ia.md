@@ -180,15 +180,41 @@ O controle de versão deve proteger as atualizações do estado:
 
 **Concluir quando:** testes demonstram pausa, gravação sem LLM, retomada com contexto, preservação do total de tentativas, idempotência e tratamento de conflitos no processo atual. Recuperação após reinício e coordenação entre processos ficam para a migração descrita no arquivo de contexto.
 
-### Etapa 7: Cozinheiro e resposta final
+### Etapa 7: Cozinheiro, resposta final e histórico da sessão
 
-**Arquivos previstos:** `src/coxinh_ia/nodes/cook.py`, `src/coxinh_ia/finalize.py` e testes.
+**Arquivos previstos:** `src/graph/nodes/cook.py`, `src/graph/prompts/cook.py`,
+`src/graph/finalize.py`, `src/recipe_history.py`, `src/recipe_session.py` e testes.
 
-**Code:** transforma a receita aprovada em passos, prepara sua descrição visual e reúne os resultados disponíveis. Usa a validação de recursos para conferir a versão final contra os ingredientes, utensílios e meios de preparo autorizados.
+**Code:** transforma a proposta aprovada pelo SubChef em uma resposta em
+português do Brasil, com título criativo, subtítulo obrigatório, passos de
+preparo em ordem e uma descrição visual para gerar a imagem na etapa 10.
 
-O Cozinheiro não pode acrescentar ou substituir recursos por conta própria. Avisar que fez uma substituição não equivale a obter autorização. Se uma mudança for necessária, ela deve ser apresentada ao usuário; após autorização e atualização do estado, a proposta volta ao Chef e ao SubChef antes de ser finalizada. O mecanismo de pausa e atualização da etapa 6 pode ser reutilizado para essa interação.
+O Cozinheiro devolve listas estruturadas de ingredientes, utensílios e
+métodos utilizados. O nó compara essas listas com as da proposta aprovada.
+Se houver divergência, pede uma única correção ao modelo. Se a segunda saída
+também divergir, a finalização falha e a receita fica fora do histórico.
+Pedidos de autorização acontecem no fluxo de revisão e Impasse, antes
+do Cozinheiro. Quando faltarem listas de autorização do usuário, a conferência
+dessas autorizações fica marcada como `incomplete`.
 
-A descrição visual deve acompanhar a receita final: massa, recheio, cores, texturas, formato e efeitos do modo de preparo. Ela será usada pela ferramenta de imagem na etapa 10.
+O finalizador reúne os dados da proposta aprovada e a apresentação do
+Cozinheiro em `final_response` e marca a execução como `completed`.
+O aviso de saúde fica separado em `final_response["health"]`, com status
+`pending` até a integração da etapa 8.
+
+A sessão guarda em memória as receitas concluídas e usa o `thread_id` como
+identificador de cada entrada. Cada novo pedido tem seu próprio `thread_id`,
+e a galeria reúne as receitas da mesma sessão. Reenviar o resultado de uma
+execução já registrada mantém uma única entrada.
+
+**Reviewer:** compara a proposta aprovada com os passos e a descrição visual.
+Confere se uma divergência nas listas declaradas aciona apenas uma correção
+e se uma segunda divergência impede a finalização. Verifica também se a
+galeria lista e abre as receitas da sessão pelo ID.
+
+**Concluir quando:** os testes com modelos simulados verificam o contrato
+da saída, a tentativa de correção, a conclusão direta e após retomada,
+o isolamento entre sessões e a ausência de entradas duplicadas no histórico.
 
 **Reviewer:** compara a receita aprovada com os passos e a descrição visual. Confirma que uma substituição não autorizada não é aceita mesmo quando acompanhada de um aviso e que as incertezas são identificadas.
 

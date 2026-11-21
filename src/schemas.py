@@ -42,3 +42,31 @@ class SubChefEvaluation(BaseModel):
             raise ValueError("A rejected proposal must include a critique.")
 
         return self
+
+
+class CookOutput(BaseModel):
+    """Define os dados que o Cozinheiro devolve após preparar a receita aprovada."""
+
+    title: NonEmptyText = Field(
+        description="A creative, humorous title that reflects the approved recipe."
+    )
+    subtitle: NonEmptyText = Field(
+        description="A short explanation of the recipe below the title."
+    )
+    steps: list[NonEmptyText] = Field(
+        min_length=1,
+        description="Preparation instructions in the order they should be followed.",
+    )
+    image_prompt: NonEmptyText = Field(
+        description="A visual description that reflects the approved recipe."
+    )
+    ingredients: list[NonEmptyText] = Field(
+        min_length=1,
+        description="Every ingredient used in the preparation.",
+    )
+    utensils: list[NonEmptyText] = Field(
+        description="Every utensil used in the preparation."
+    )
+    preparation_methods: list[NonEmptyText] = Field(
+        description="Every preparation method used in the recipe."
+    )

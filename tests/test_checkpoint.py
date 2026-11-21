@@ -9,6 +9,9 @@ from src.schemas import Recipe, SubChefEvaluation
 from src.state import RecipeState, create_initial_state
 
 
+pytestmark = pytest.mark.usefixtures("stub_cook_llm")
+
+
 def create_recipe() -> Recipe:
     """Cria uma proposta fixa para os testes de checkpoint."""
     return Recipe(
@@ -26,10 +29,13 @@ def create_in_memory_workflow(monkeypatch, decisions):
     calls = {"chef": 0, "subchef": 0}
 
     def fake_chef_node(state: RecipeState) -> dict[str, object]:
-        """Devolve uma proposta e avança sua versão."""
+        """Gera uma proposta que inclui os ingredientes pedidos na retomada."""
         calls["chef"] += 1
+        recipe = create_recipe()
+        recipe.ingredients.extend(state.get("ingredient_additions", []))
+
         return {
-            "recipe": create_recipe(),
+            "recipe": recipe,
             "recipe_version": state["recipe_version"] + 1,
         }
 
@@ -102,7 +108,7 @@ def test_workflow_pauses_at_impasse_and_save_does_not_restart_agents(monkeypatch
 
 
 def test_resume_starts_a_new_cycle_at_chef_and_subchef(monkeypatch):
-    """Verifica que retomar inicia outra rodada com Chef e SubChef."""
+    """Verifica que retomar inicia outra rodada e conclui a receita aprovada."""
     workflow, calls = create_in_memory_workflow(
         monkeypatch, ["rejected", "rejected", "approved"]
     )
@@ -120,13 +126,18 @@ def test_resume_starts_a_new_cycle_at_chef_and_subchef(monkeypatch):
         ),
     )
 
-    assert result["status"] == "approved"
+    assert result["status"] == "completed"
     assert result["user_action"] == "resume"
     assert result["state_version"] == 1
     assert result["revision_count"] == 1
     assert result["total_attempts"] == 3
     assert result["recipe_version"] == 3
     assert result["ingredient_additions"] == ["mushroom"]
+    assert result["final_response"]["recipe"]["ingredients"] == [
+        "potato",
+        "chicken",
+        "mushroom",
+    ]
     assert calls == {"chef": 3, "subchef": 3}
 
 
