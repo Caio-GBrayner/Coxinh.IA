@@ -23,6 +23,15 @@ HEALTH_SEARCH: HealthSearch = simulated_health_search
 
 
 class HealthSource(BaseModel):
+    """Fonte usada no aviso. A URL de origem é obrigatória."""
+
+    title: NonEmptyText
+    url: NonEmptyText
+
+
+class CitedSource(BaseModel):
+    """Fonte citada pelo modelo. A URL é confirmada contra o contexto recuperado."""
+
     title: NonEmptyText
     url: NonEmptyText | None = None
 
@@ -31,7 +40,7 @@ class HealthAdvice(BaseModel):
     health_warning: NonEmptyText
     contraindications: list[NonEmptyText] = Field(default_factory=list)
     possible_effects: list[NonEmptyText] = Field(default_factory=list)
-    sources_used: list[HealthSource] = Field(default_factory=list)
+    sources_used: list[CitedSource] = Field(default_factory=list)
     uncertainty: NonEmptyText | None = None
 
     @model_validator(mode="after")
@@ -53,28 +62,26 @@ def _normalize(value: str) -> str:
 def _index_known_sources(
     retrieved: list[dict[str, Any]],
 ) -> dict[tuple[str, str], HealthSource]:
-    """Indexa as fontes recuperadas por URL e por título."""
+    """Indexa por URL e por título as fontes recuperadas que têm URL de origem."""
     index: dict[tuple[str, str], HealthSource] = {}
     for item in retrieved:
         title = item.get("title")
         url = item.get("url")
-        if not isinstance(title, str) or not title.strip():
+        if not (isinstance(title, str) and title.strip()):
             continue
-        source = HealthSource(
-            title=title,
-            url=url if isinstance(url, str) and url.strip() else None,
-        )
-        if source.url is not None:
-            index.setdefault(("url", _normalize(source.url)), source)
+        if not (isinstance(url, str) and url.strip()):
+            continue
+        source = HealthSource(title=title, url=url)
+        index.setdefault(("url", _normalize(source.url)), source)
         index.setdefault(("title", _normalize(source.title)), source)
     return index
 
 
 def _filter_used_sources(
-    cited: list[HealthSource],
+    cited: list[CitedSource],
     retrieved: list[dict[str, Any]],
 ) -> list[HealthSource]:
-    """Mantém apenas fontes citadas que existem no contexto recuperado."""
+    """Mantém apenas fontes citadas que existem no contexto recuperado com URL."""
     index = _index_known_sources(retrieved)
     used: list[HealthSource] = []
     for source in cited:
@@ -120,7 +127,7 @@ def health_node(state: RecipeState) -> dict[str, Any]:
         return {
             "health_status": "unavailable",
             "health_warning": None,
-            "contraindications": None,
+            "health_contraindications": None,
             "health_sources": [],
             "health_uncertainty": UNAVAILABLE_MESSAGE,
         }
@@ -128,14 +135,15 @@ def health_node(state: RecipeState) -> dict[str, Any]:
     sources = _filter_used_sources(
         advice.sources_used, context.retrieved_health_context
     )
+    status = "ok" if sources else "insufficient"
     uncertainty = advice.uncertainty
-    if not sources and uncertainty is None:
+    if status == "insufficient" and uncertainty is None:
         uncertainty = NO_EVIDENCE_MESSAGE
 
     return {
-        "health_status": "ok",
+        "health_status": status,
         "health_warning": advice.health_warning,
-        "contraindications": list(advice.contraindications),
+        "health_contraindications": list(advice.contraindications),
         "health_sources": [source.model_dump() for source in sources],
         "health_uncertainty": uncertainty,
     }

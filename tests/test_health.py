@@ -85,7 +85,7 @@ def test_health_returns_only_health_keys_and_keeps_recipe(monkeypatch):
     assert set(result) == {
         "health_status",
         "health_warning",
-        "contraindications",
+        "health_contraindications",
         "health_sources",
         "health_uncertainty",
     }
@@ -114,7 +114,7 @@ def test_health_uses_default_simulated_search_without_network(monkeypatch):
 
     result = health_node(state)
 
-    assert result["health_status"] == "ok"
+    assert result["health_status"] == "insufficient"
     assert result["health_sources"] == []
 
 
@@ -154,10 +154,10 @@ def test_health_drops_source_not_present_in_retrieved_context(monkeypatch):
     result = health_node(state)
 
     assert result["health_sources"] == []
-    assert result["health_status"] == "ok"
+    assert result["health_status"] == "insufficient"
 
 
-def test_health_without_sources_is_ok_with_uncertainty(monkeypatch):
+def test_health_without_sources_is_insufficient_with_uncertainty(monkeypatch):
     state = create_state()
     mock_search(monkeypatch)
     mock_structured_model(
@@ -167,7 +167,7 @@ def test_health_without_sources_is_ok_with_uncertainty(monkeypatch):
 
     result = health_node(state)
 
-    assert result["health_status"] == "ok"
+    assert result["health_status"] == "insufficient"
     assert result["health_sources"] == []
     assert result["health_uncertainty"]
 
@@ -231,7 +231,7 @@ def test_health_passes_empty_contraindications_through(monkeypatch):
 
     result = health_node(state)
 
-    assert result["contraindications"] == []
+    assert result["health_contraindications"] == []
     assert result["health_status"] == "ok"
 
 
@@ -242,4 +242,39 @@ def test_advice_without_sources_must_declare_uncertainty():
 
 def test_source_requires_title():
     with pytest.raises(pydantic.ValidationError):
-        HealthSource(title="   ")
+        HealthSource(title="   ", url="https://example.test/a")
+
+
+def test_source_requires_url():
+    with pytest.raises(pydantic.ValidationError):
+        HealthSource(title="Fonte A")
+
+
+def test_retrieved_item_without_url_is_not_a_source(monkeypatch):
+    state = create_state()
+    mock_search(monkeypatch, {"Potato dough": [retrieved_item(url=None)]})
+    mock_structured_model(
+        monkeypatch,
+        create_advice(sources_used=[{"title": "Fonte A"}]),
+    )
+
+    result = health_node(state)
+
+    assert result["health_sources"] == []
+    assert result["health_status"] == "insufficient"
+
+
+def test_source_cited_by_title_receives_retrieved_url(monkeypatch):
+    state = create_state()
+    mock_search(monkeypatch, {"Chicken": [retrieved_item()]})
+    mock_structured_model(
+        monkeypatch,
+        create_advice(sources_used=[{"title": "Fonte A"}]),
+    )
+
+    result = health_node(state)
+
+    assert result["health_sources"] == [
+        {"title": "Fonte A", "url": "https://example.test/a"}
+    ]
+    assert result["health_status"] == "ok"

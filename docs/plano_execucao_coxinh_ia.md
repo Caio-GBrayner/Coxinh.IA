@@ -216,20 +216,16 @@ galeria lista e abre as receitas da sessão pelo ID.
 da saída, a tentativa de correção, a conclusão direta e após retomada,
 o isolamento entre sessões e a ausência de entradas duplicadas no histórico.
 
-**Reviewer:** compara a receita aprovada com os passos e a descrição visual. Confirma que uma substituição não autorizada não é aceita mesmo quando acompanhada de um aviso e que as incertezas são identificadas.
-
-**Concluir quando:** uma execução aprovada produz uma resposta final estruturada e testada. Os testes verificam preservação dos recursos e exigência de autorização seguida de nova revisão para mudanças.
-
 **Decisões registradas para esta etapa:**
 
 * Não há retomada depois do Cozinheiro. Nenhuma pausa ou pedido de autorização após esse nó.
 * A saída do Cozinheiro traz título criativo, subtítulo obrigatório, passos de preparo, descrição visual e as listas estruturadas de ingredientes, utensílios e métodos de preparo. Sem essas listas, a validação de recursos não tem o que comparar.
 * Se as listas autorizadas forem `None`, o resultado é marcado como não verificado, nunca como aprovado.
-* **Pendente (decisão 9):** o que fazer quando o Cozinheiro introduz um recurso não autorizado. Opção A: refazer o Cozinheiro com limite de tentativas, e encerrar com erro se o limite estourar. Opção B: pausar para o usuário autorizar. A opção B contradiz a regra de não haver retomada depois do Cozinheiro, então precisa de decisão explícita do time. Até lá, não criar pausa após o Cozinheiro.
+* **Decidido (decisão 9, opção A):** se o Cozinheiro declarar recursos diferentes da proposta aprovada, ele tem uma tentativa de correção. Se a divergência persistir, a finalização falha. Não há pausa nem pedido de autorização depois do Cozinheiro; mudanças de recurso acontecem no ciclo de revisão e Impasse, antes dele.
 
 ### Etapa 8: Aviso informativo de saúde
 
-**Arquivos previstos:** `src/graph/nodes/health.py`, `src/graph/health_search.py`, `src/graph/prompts/health.py` e `tests/test_health.py`. Alterações em `src/state.py`: `health_status` e `contraindications`.
+**Arquivos previstos:** `src/graph/nodes/health.py`, `src/graph/health_search.py`, `src/graph/prompts/health.py` e `tests/test_health.py`. Alterações em `src/state.py`: `health_status` e `health_contraindications`. Ligação em `src/graph/builder.py`, stub automático em `tests/conftest.py` e testes de integração em `tests/test_graph.py`.
 
 **Code:** adiciona um aviso complementar sobre contraindicações e possíveis riscos, com incerteza explícita quando não houver evidência suficiente. Nesta etapa, a integração pode receber referências simuladas.
 
@@ -238,11 +234,12 @@ O aviso permanece separado da receita. Ele não aprova, reprova, bloqueia nem mo
 **Decisões registradas para esta etapa:**
 
 * Três consultas simuladas, uma para massa, uma para recheio e uma para preparo, feitas uma vez depois do Cozinheiro. A busca real fica na etapa 9.
-* `health_status` assume `pending`, `ok` ou `unavailable`. `ok` significa aviso gerado, não que há fonte. Falha de consulta ou de modelo resulta em `unavailable`.
-* Toda receita recebe ao menos uma contraindicação geral, como excesso, mesmo quando parece saudável. O schema aceita lista vazia apenas como último recurso.
-* Cada fonte usada traz título e URL. O código descarta fonte citada que não existe no contexto recuperado, sem depender do modelo.
+* `health_status` assume `pending`, `ok`, `insufficient` ou `unavailable`. `ok`: ao menos uma fonte válida fundamenta o aviso. `insufficient`: o aviso foi gerado, mas nenhuma fonte válida o fundamenta. `unavailable`: falha técnica de consulta ou de modelo.
+* As contraindicações vêm só do que os trechos sustentam, inclusive riscos gerais como excesso quando os trechos os mencionam. Se nenhum trecho sustentar uma contraindicação, a lista é vazia e a incerteza explica isso. No estado, o campo é `health_contraindications`; na resposta final, `final_response["health"]["contraindications"]`.
+* Cada fonte usada traz título e URL de origem. Trecho recuperado sem URL não conta como fonte. O código descarta fonte citada que não existe no contexto recuperado, sem depender do modelo.
 * Sem fonte, a incerteza é obrigatória. A incerteza também informa o grau de confiança da evidência.
-* O nó não é ligado ao grafo antes do merge da etapa 7. A ligação `cook → health → finalize` é feita depois.
+* Ligação no grafo: `cook → health → finalize`. A receita chega a `completed` mesmo quando o aviso fica `unavailable`.
+* Nos testes, `tests/conftest.py` aplica um stub automático ao nó de saúde, para que nenhum teste faça chamada real ao modelo.
 
 **Reviewer:** confirma que o aviso não altera o roteamento nem os ingredientes; confere também que não há diagnóstico ou certeza individual sem fundamento.
 
@@ -327,7 +324,7 @@ A resposta reúne receita, aviso informativo de saúde, imagem quando disponíve
 * A decisão de encerrar é registrada e respeitada.
 * O armazenamento persistente permite recuperar a mesma conversa após reiniciar a aplicação.
 * Atualizações com `expected_state_version` desatualizada são rejeitadas sem sobrescrita. A proteção continua válida para atualizações concorrentes.
-* A receita final respeita os recursos autorizados. Substituições exigem autorização do usuário e nova revisão antes da finalização. **Pendente:** o comportamento depois do Cozinheiro depende da decisão 9 (seção 6).
+* A receita final respeita os recursos autorizados. Mudanças de recurso acontecem no ciclo Chef → SubChef → Impasse, antes do Cozinheiro. Se o Cozinheiro divergir da proposta aprovada, ele tem uma tentativa de correção, e depois a finalização falha (decisão 9).
 * O aviso de saúde permanece separado da receita e não aprova, reprova, bloqueia ou modifica o fluxo.
 * O RAG e a pesquisa web preservam a origem dos resultados; o aviso apresenta as fontes utilizadas e reconhece evidência insuficiente.
 * As cinco ferramentas MCP estão implementadas, integradas e testadas, com o registro de Impasse vinculado à interação humana.
@@ -343,8 +340,8 @@ Estado do projeto em 2026-11-21, conforme o código no repositório:
 
 * Etapa 0: parcial. Falta o README com instruções de instalação e execução.
 * Etapas 1 a 6: implementadas. A etapa 6 é em memória; a persistência durável é pendente.
-* Etapa 7: em andamento, por outra pessoa da dupla.
-* Etapa 8: implementada, aguardando commit e revisão. Ligação ao grafo depois do merge da etapa 7.
+* Etapa 7: integrada na `main` (PR #14).
+* Etapa 8: em revisão no PR #13, já ligada ao grafo (`cook → health → finalize`).
 * Etapas 9 a 12: pendentes.
 
 | # | Decisão | Situação | Etapas |
@@ -355,9 +352,9 @@ Estado do projeto em 2026-11-21, conforme o código no repositório:
 | 4 | Consultas web acontecem depois do Cozinheiro, três por receita (massa, recheio e preparo). | Decidida | 8, 9 |
 | 5 | Provedor de busca web: API do Tavily, plano gratuito. | Decidida | 9 |
 | 6 | Procedência das fontes não é critério; título e URL são obrigatórios. | Decidida | 8, 9 |
-| 7 | `health_status` com `pending`, `ok` e `unavailable`. `ok` significa aviso gerado. | Decidida | 8 |
-| 8 | Contraindicação geral sempre presente; lista vazia só como último recurso. | Decidida | 8 |
-| 9 | Recurso não autorizado no Cozinheiro: refazer o Cozinheiro (opção A) ou pausar para o usuário (opção B). | **Pendente** | 7 |
+| 7 | `health_status` com `pending`, `ok`, `insufficient` e `unavailable`. `ok` exige fonte válida; `insufficient` é aviso sem fundamento nas fontes; `unavailable` é falha técnica. | Decidida (revisada no PR #13) | 8 |
+| 8 | Contraindicações vêm só do que as fontes sustentam; lista vazia quando nenhuma é sustentada. | Decidida (revisada no PR #13) | 8 |
+| 9 | Recurso divergente no Cozinheiro: uma tentativa de correção e, se persistir, falha da finalização (opção A). | Decidida (PR #14) | 7 |
 | 10 | Manter ou remover a base RAG curada. | **Pendente** | 9 |
 | 11 | Nomes reais de Pessoa A e Pessoa B. | **Pendente** | Todas |
 | 12 | Provedor de geração de imagem e contrato de idempotência. | **Pendente** | 10 |

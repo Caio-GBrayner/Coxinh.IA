@@ -1,8 +1,10 @@
 from unittest.mock import Mock
 
+from langchain_core.runnables import RunnableLambda
 import pytest
 
 from src.graph import builder as graph_module
+from src.graph.nodes import health
 from src.schemas import Recipe, SubChefEvaluation
 from src.state import RecipeState, create_initial_state
 
@@ -158,3 +160,84 @@ def test_technical_subchef_failure_does_not_record_attempt(monkeypatch):
     record_review.assert_not_called()
     assert initial_state["revision_count"] == 0
     assert initial_state["total_attempts"] == 0
+
+
+def stub_health(monkeypatch, *, advice=None, error=None, results=None):
+    """Configura a busca e o modelo simulados do nó de saúde."""
+    monkeypatch.setattr(health, "HEALTH_SEARCH", lambda query: list(results or []))
+
+    def respond(_prompt):
+        """Devolve o aviso programado ou simula uma falha técnica."""
+        if error is not None:
+            raise error
+        return advice
+
+    model = Mock()
+    model.with_structured_output.return_value = RunnableLambda(respond)
+    monkeypatch.setattr(health, "call_llm", Mock(return_value=model))
+
+
+def test_health_advice_appears_in_final_response(monkeypatch):
+    """Verifica que o aviso de saúde chega em final_response["health"]."""
+    workflow, _ = build_test_graph(monkeypatch, ["approved"])
+    stub_health(
+        monkeypatch,
+        results=[
+            {"title": "Fonte A", "url": "https://example.test/a", "content": "trecho"}
+        ],
+        advice={
+            "health_warning": "Aviso culinário não oficial.",
+            "contraindications": ["Consumo em excesso."],
+            "sources_used": [{"title": "Fonte A", "url": "https://example.test/a"}],
+            "uncertainty": "Confiança média nas fontes simuladas.",
+        },
+    )
+
+    result = workflow.invoke(create_initial_state("Make a coxinha.", "thread-1"))
+
+    health_response = result["final_response"]["health"]
+    assert result["status"] == "completed"
+    assert health_response["health_status"] == "ok"
+    assert health_response["warning"] == "Aviso culinário não oficial."
+    assert health_response["contraindications"] == ["Consumo em excesso."]
+    assert health_response["sources"] == [
+        {"title": "Fonte A", "url": "https://example.test/a"}
+    ]
+
+
+def test_recipe_completes_when_health_advice_is_unavailable(monkeypatch):
+    """Verifica que uma falha no aviso de saúde não impede a conclusão."""
+    workflow, _ = build_test_graph(monkeypatch, ["approved"])
+    stub_health(monkeypatch, error=RuntimeError("LLM request failed."))
+
+    result = workflow.invoke(create_initial_state("Make a coxinha.", "thread-1"))
+
+    health_response = result["final_response"]["health"]
+    assert result["status"] == "completed"
+    assert health_response["health_status"] == "unavailable"
+    assert health_response["warning"] is None
+    assert health_response["contraindications"] == []
+    assert result["final_response"]["recipe"]["ingredients"] == [
+        "potato",
+        "chicken",
+    ]
+
+
+def test_health_runs_after_cook_and_before_finalize(monkeypatch):
+    """Verifica a ordem Cozinheiro → Saúde → Finalização."""
+    seen = {}
+
+    def tracking_health_node(state: RecipeState) -> dict[str, object]:
+        """Registra o que já existe no estado quando o nó de saúde roda."""
+        seen["cook_output"] = "cook_output" in state
+        seen["final_response"] = "final_response" in state
+        return health.health_node(state)
+
+    monkeypatch.setattr(graph_module, "health_node", tracking_health_node)
+    workflow, _ = build_test_graph(monkeypatch, ["approved"])
+
+    result = workflow.invoke(create_initial_state("Make a coxinha.", "thread-1"))
+
+    assert seen == {"cook_output": True, "final_response": False}
+    assert result["status"] == "completed"
+    assert result["final_response"]["health"]["health_status"] == "insufficient"
