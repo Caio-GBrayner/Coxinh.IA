@@ -46,6 +46,8 @@ class RecipeState(TypedDict, total=False):
     health_warning: str | None
     health_sources: list[dict[str, Any]]
     health_uncertainty: str | None
+    health_status: Literal["pending", "ok", "unavailable"] | None
+    contraindications: list[str] | None
 
     recipe_hash: str | None
     idempotency_key: str | None
