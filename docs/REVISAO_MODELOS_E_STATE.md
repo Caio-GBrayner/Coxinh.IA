@@ -54,7 +54,7 @@ O schema e o state dão uma base útil para iniciar o roteamento. Os testes pass
 - `StatusFluxo` agora contém somente status reais do fluxo.
 - `max_revisions` limita avaliações do SubChef no ciclo, incluindo a proposta inicial. Com limite `2`, o fluxo avalia até duas propostas.
 - Cada decisão válida incrementa `revision_count` e `total_attempts`; `revision_count` conta avaliações no ciclo atual e `total_attempts` mantém o total da conversa.
-- `recipe_version` representa a versão da receita. `state_version` representa a versão persistida, cuja atualização concorrente pertence à camada de persistência. `expected_state_version` é dado do pedido de atualização, não parte do estado persistido.
+- `recipe_version` representa a versão da receita. `state_version` acompanha atualizações do fluxo; no MVP, o serviço em memória as serializa por conversa. Uma implantação durável precisa fazer essa atualização atomicamente no armazenamento compartilhado. `expected_state_version` é dado do pedido, não parte do estado.
 - Recursos autorizados começam como `None` para distinguir informação ainda não definida de uma lista vazia explicitamente autorizada.
 - O limite de tentativas pode ser configurado ao criar o estado. A retomada deve zerar apenas `revision_count`, preservando `total_attempts` e a sequência de `recipe_version`.
 - Uma aprovação na última tentativa segue para o Cozinheiro; uma rejeição na última tentativa segue para o Impasse. Falhas técnicas não incrementam os contadores.

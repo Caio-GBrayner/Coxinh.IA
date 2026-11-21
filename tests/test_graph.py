@@ -1,0 +1,145 @@
+from unittest.mock import Mock
+
+import pytest
+
+from src.graph import builder as graph_module
+from src.schemas import Recipe, SubChefEvaluation
+from src.state import RecipeState, create_initial_state
+
+
+def create_recipe() -> Recipe:
+    """Cria uma proposta fixa para os testes do grafo."""
+    return Recipe(
+        dough="Potato dough",
+        filling="Chicken",
+        ingredients=["potato", "chicken"],
+        preparation="Boil the potatoes and shape the dough.",
+        utensils=["pot"],
+        preparation_methods=["boiling"],
+    )
+
+
+def build_test_graph(monkeypatch, decisions):
+    """Monta o grafo com agentes simulados e contadores de chamadas."""
+    calls = {"chef": 0, "subchef": 0}
+
+    def fake_chef_node(state: RecipeState) -> dict[str, object]:
+        """Devolve uma proposta e avança a versão da receita."""
+        calls["chef"] += 1
+        return {
+            "recipe": create_recipe(),
+            "recipe_version": state["recipe_version"] + 1,
+        }
+
+    def fake_subchef_node(state: RecipeState) -> dict[str, object]:
+        """Devolve a próxima decisão programada para o cenário."""
+        calls["subchef"] += 1
+        decision = decisions[calls["subchef"] - 1]
+        return {
+            "subchef_evaluation": SubChefEvaluation(
+                decision=decision,
+                critique="Revise the proposal." if decision == "rejected" else "",
+            )
+        }
+
+    monkeypatch.setattr(graph_module, "chef_node", fake_chef_node)
+    monkeypatch.setattr(graph_module, "subchef_node", fake_subchef_node)
+
+    return graph_module.build_graph(), calls
+
+
+def test_approval_on_first_attempt_ends_as_approved(monkeypatch):
+    """Verifica que aprovar na primeira avaliação encerra o fluxo."""
+    workflow, calls = build_test_graph(monkeypatch, ["approved"])
+    initial_state = create_initial_state("Make a coxinha.", "thread-1")
+
+    result = workflow.invoke(initial_state)
+
+    assert result["status"] == "approved"
+    assert result["revision_count"] == 1
+    assert result["total_attempts"] == 1
+    assert result["recipe_version"] == 1
+    assert calls == {"chef": 1, "subchef": 1}
+
+
+def test_rejection_then_approval_revises_and_finishes(monkeypatch):
+    """Verifica que a primeira rejeição volta ao Chef para outra proposta."""
+    workflow, calls = build_test_graph(monkeypatch, ["rejected", "approved"])
+    initial_state = create_initial_state(
+        "Make a coxinha.",
+        "thread-1",
+        max_revisions=2,
+    )
+
+    result = workflow.invoke(initial_state)
+
+    assert result["status"] == "approved"
+    assert result["revision_count"] == 2
+    assert result["total_attempts"] == 2
+    assert result["recipe_version"] == 2
+    assert calls == {"chef": 2, "subchef": 2}
+
+
+def test_rejection_on_last_attempt_ends_at_impasse(monkeypatch):
+    """Verifica que o grafo encerra em awaiting_user ao esgotar as avaliações."""
+    workflow, calls = build_test_graph(monkeypatch, ["rejected", "rejected"])
+    initial_state = create_initial_state(
+        "Make a coxinha.",
+        "thread-1",
+        max_revisions=2,
+    )
+
+    result = workflow.invoke(initial_state)
+
+    assert result["status"] == "awaiting_user"
+    assert result["revision_count"] == 2
+    assert result["total_attempts"] == 2
+    assert result["recipe_version"] == 2
+    assert calls == {"chef": 2, "subchef": 2}
+
+
+def test_approval_on_last_attempt_is_not_blocked_by_limit(monkeypatch):
+    """Verifica que uma aprovação na última avaliação disponível é aceita."""
+    workflow, calls = build_test_graph(monkeypatch, ["approved"])
+    initial_state = create_initial_state(
+        "Make a coxinha.",
+        "thread-1",
+        max_revisions=1,
+    )
+
+    result = workflow.invoke(initial_state)
+
+    assert result["status"] == "approved"
+    assert result["revision_count"] == 1
+    assert result["total_attempts"] == 1
+    assert calls == {"chef": 1, "subchef": 1}
+
+
+def test_technical_subchef_failure_does_not_record_attempt(monkeypatch):
+    """Verifica que uma falha técnica no SubChef não registra uma avaliação."""
+    def fake_chef_node(state: RecipeState) -> dict[str, object]:
+        """Devolve a proposta que chega ao SubChef antes da falha."""
+        return {
+            "recipe": create_recipe(),
+            "recipe_version": state["recipe_version"] + 1,
+        }
+
+    monkeypatch.setattr(graph_module, "chef_node", fake_chef_node)
+    monkeypatch.setattr(
+        graph_module,
+        "subchef_node",
+        Mock(side_effect=RuntimeError("LLM request failed.")),
+    )
+
+    record_review = Mock(wraps=graph_module.record_review_node)
+    monkeypatch.setattr(graph_module, "record_review_node", record_review)
+
+    workflow = graph_module.build_graph()
+    initial_state = create_initial_state("Make a coxinha.", "thread-1")
+
+    with pytest.raises(RuntimeError, match="LLM request failed"):
+        workflow.invoke(initial_state)
+
+    record_review.assert_not_called()
+    assert initial_state["revision_count"] == 0
+    assert initial_state["total_attempts"] == 0
