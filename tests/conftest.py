@@ -5,7 +5,24 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.runnables import RunnableLambda
 
-from src.graph.nodes import cook
+from src.graph.nodes import cook, health
+
+
+@pytest.fixture(autouse=True)
+def stub_health_llm(monkeypatch):
+    """Impede chamadas reais no nó de saúde. Testes podem sobrescrever o stub."""
+    advice = {
+        "health_warning": "Aviso culinário não oficial.",
+        "contraindications": [],
+        "sources_used": [],
+        "uncertainty": "Sem fontes simuladas; confiança nenhuma.",
+    }
+    model = Mock()
+    model.with_structured_output.return_value = RunnableLambda(lambda _: advice)
+    mocked_call = Mock(return_value=model)
+    monkeypatch.setattr(health, "call_llm", mocked_call)
+    monkeypatch.setattr(health, "HEALTH_SEARCH", health.simulated_health_search)
+    return mocked_call
 
 
 @pytest.fixture
