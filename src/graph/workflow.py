@@ -7,7 +7,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
-from src.graph.graph import build_graph
+from src.graph.builder import build_graph
 from src.graph.impasse import ImpasseDecision, StateVersionConflict
 from src.state import RecipeState
 
@@ -53,6 +53,7 @@ class InMemoryWorkflow:
         thread_id: str,
         decision: ImpasseDecision,
     ) -> WorkflowResult:
+        """Aplica a decisão ou continua uma retomada já registrada no checkpoint."""
         run_config = self._run_config(thread_id)
         fingerprint = decision.model_dump_json(exclude={"idempotency_key"})
         idempotency_key = (thread_id, decision.idempotency_key)
@@ -72,26 +73,38 @@ class InMemoryWorkflow:
                 raise KeyError(f"No workflow exists for thread_id '{thread_id}'.")
 
             current_state = snapshot.values
-            if current_state.get("status") != "awaiting_user":
-                raise ValueError("The workflow is not waiting for an Impasse decision.")
-
-            current_version = current_state.get("state_version")
             if (
-                not isinstance(current_version, int)
-                or isinstance(current_version, bool)
-                or current_version < 0
+                current_state.get("status") == "in_revision"
+                and snapshot.next
+                and current_state.get("last_impasse_decision_key")
+                == decision.idempotency_key
             ):
-                raise ValueError("state_version must be a non-negative integer.")
-            if decision.expected_state_version != current_version:
-                raise StateVersionConflict(
-                    decision.expected_state_version,
-                    current_version,
-                )
+                if current_state.get("last_impasse_decision_fingerprint") != fingerprint:
+                    raise ValueError(
+                        "An idempotency key cannot be reused for a different decision."
+                    )
+                graph_input = None
+            else:
+                if current_state.get("status") != "awaiting_user":
+                    raise ValueError(
+                        "The workflow is not waiting for an Impasse decision."
+                    )
 
-            result = self._graph.invoke(
-                Command(resume=decision.model_dump()),
-                config=run_config,
-            )
+                current_version = current_state.get("state_version")
+                if (
+                    not isinstance(current_version, int)
+                    or isinstance(current_version, bool)
+                    or current_version < 0
+                ):
+                    raise ValueError("state_version must be a non-negative integer.")
+                if decision.expected_state_version != current_version:
+                    raise StateVersionConflict(
+                        decision.expected_state_version,
+                        current_version,
+                    )
+                graph_input = Command(resume=decision.model_dump())
+
+            result = self._graph.invoke(graph_input, config=run_config)
             result_copy = deepcopy(result)
             self._processed_decisions[idempotency_key] = (
                 fingerprint,
