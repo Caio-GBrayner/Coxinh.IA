@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from src.graph import graph as graph_module
+from src.graph import builder as graph_module
 from src.graph.impasse import ImpasseDecision, StateVersionConflict
 from src.graph.workflow import InMemoryWorkflow
 from src.schemas import Recipe, SubChefEvaluation
@@ -10,6 +10,7 @@ from src.state import RecipeState, create_initial_state
 
 
 def create_recipe() -> Recipe:
+    """Cria uma proposta fixa para os testes de checkpoint."""
     return Recipe(
         dough="Potato dough",
         filling="Chicken",
@@ -21,9 +22,11 @@ def create_recipe() -> Recipe:
 
 
 def create_in_memory_workflow(monkeypatch, decisions):
+    """Monta o workflow com agentes simulados e conta suas execuções."""
     calls = {"chef": 0, "subchef": 0}
 
     def fake_chef_node(state: RecipeState) -> dict[str, object]:
+        """Devolve uma proposta e avança sua versão."""
         calls["chef"] += 1
         return {
             "recipe": create_recipe(),
@@ -31,6 +34,7 @@ def create_in_memory_workflow(monkeypatch, decisions):
         }
 
     def fake_subchef_node(state: RecipeState) -> dict[str, object]:
+        """Devolve a próxima avaliação programada para o teste."""
         calls["subchef"] += 1
         decision = decisions[calls["subchef"] - 1]
         return {
@@ -53,6 +57,7 @@ def create_decision(
     ingredient_additions: list[str] | None = None,
     user_guidance: str | None = None,
 ) -> ImpasseDecision:
+    """Monta uma decisão de Impasse com os dados do cenário."""
     return ImpasseDecision(
         action=action,
         expected_state_version=expected_state_version,
@@ -63,14 +68,12 @@ def create_decision(
 
 
 def test_workflow_pauses_at_impasse_and_save_does_not_restart_agents(monkeypatch):
+    """Verifica que salvar no Impasse mantém a execução pausada."""
     workflow, calls = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected"],
+        monkeypatch, ["rejected", "rejected"]
     )
     initial_state = create_initial_state(
-        "Make a coxinha.",
-        "thread-1",
-        max_revisions=2,
+        "Make a coxinha.", "thread-1", max_revisions=2
     )
 
     result = workflow.start(initial_state)
@@ -99,16 +102,12 @@ def test_workflow_pauses_at_impasse_and_save_does_not_restart_agents(monkeypatch
 
 
 def test_resume_starts_a_new_cycle_at_chef_and_subchef(monkeypatch):
+    """Verifica que retomar inicia outra rodada com Chef e SubChef."""
     workflow, calls = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected", "approved"],
+        monkeypatch, ["rejected", "rejected", "approved"]
     )
     workflow.start(
-        create_initial_state(
-            "Make a coxinha.",
-            "thread-1",
-            max_revisions=2,
-        )
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
     )
 
     result = workflow.submit_impasse_decision(
@@ -132,16 +131,12 @@ def test_resume_starts_a_new_cycle_at_chef_and_subchef(monkeypatch):
 
 
 def test_cancel_ends_workflow_without_restarting_agents(monkeypatch):
+    """Verifica que cancelar encerra a execução sem chamar os agentes."""
     workflow, calls = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected"],
+        monkeypatch, ["rejected", "rejected"]
     )
     workflow.start(
-        create_initial_state(
-            "Make a coxinha.",
-            "thread-1",
-            max_revisions=2,
-        )
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
     )
 
     result = workflow.submit_impasse_decision(
@@ -159,16 +154,12 @@ def test_cancel_ends_workflow_without_restarting_agents(monkeypatch):
 
 
 def test_stale_state_version_is_rejected_without_resuming(monkeypatch):
+    """Verifica que uma versão incompatível não altera o checkpoint."""
     workflow, _ = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected"],
+        monkeypatch, ["rejected", "rejected"]
     )
     workflow.start(
-        create_initial_state(
-            "Make a coxinha.",
-            "thread-1",
-            max_revisions=2,
-        )
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
     )
 
     with pytest.raises(StateVersionConflict, match="expected 1, current version is 0"):
@@ -189,16 +180,12 @@ def test_stale_state_version_is_rejected_without_resuming(monkeypatch):
 
 
 def test_duplicate_impasse_decision_is_idempotent(monkeypatch):
+    """Verifica que reenviar uma decisão devolve o resultado anterior."""
     workflow, calls = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected"],
+        monkeypatch, ["rejected", "rejected"]
     )
     workflow.start(
-        create_initial_state(
-            "Make a coxinha.",
-            "thread-1",
-            max_revisions=2,
-        )
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
     )
     decision = create_decision(
         "save",
@@ -216,16 +203,12 @@ def test_duplicate_impasse_decision_is_idempotent(monkeypatch):
 
 
 def test_concurrent_updates_from_same_version_allow_only_one(monkeypatch):
+    """Verifica que apenas uma atualização concorrente pode usar a versão inicial."""
     workflow, _ = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected"],
+        monkeypatch, ["rejected", "rejected"]
     )
     workflow.start(
-        create_initial_state(
-            "Make a coxinha.",
-            "thread-1",
-            max_revisions=2,
-        )
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
     )
     decisions = [
         create_decision(
@@ -238,6 +221,7 @@ def test_concurrent_updates_from_same_version_allow_only_one(monkeypatch):
     ]
 
     def submit(decision):
+        """Envia uma decisão e devolve o conflito para o teste conferir."""
         try:
             return workflow.submit_impasse_decision("thread-1", decision)
         except StateVersionConflict as error:
@@ -253,16 +237,12 @@ def test_concurrent_updates_from_same_version_allow_only_one(monkeypatch):
 
 
 def test_idempotency_key_cannot_be_reused_with_different_payload(monkeypatch):
+    """Verifica que a mesma chave não aceita dados diferentes."""
     workflow, _ = create_in_memory_workflow(
-        monkeypatch,
-        ["rejected", "rejected"],
+        monkeypatch, ["rejected", "rejected"]
     )
     workflow.start(
-        create_initial_state(
-            "Make a coxinha.",
-            "thread-1",
-            max_revisions=2,
-        )
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
     )
     workflow.submit_impasse_decision(
         "thread-1",
@@ -287,10 +267,8 @@ def test_idempotency_key_cannot_be_reused_with_different_payload(monkeypatch):
 
 
 def test_start_rejects_reuse_of_existing_thread_id(monkeypatch):
-    workflow, _ = create_in_memory_workflow(
-        monkeypatch,
-        ["approved"],
-    )
+    """Verifica que uma nova execução não reutiliza uma conversa existente."""
+    workflow, _ = create_in_memory_workflow(monkeypatch, ["approved"])
     initial_state = create_initial_state("Make a coxinha.", "thread-1")
     workflow.start(initial_state)
 
