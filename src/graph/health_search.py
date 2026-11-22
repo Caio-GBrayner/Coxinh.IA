@@ -8,10 +8,25 @@ HealthSearch = Callable[[str], list[dict[str, Any]]]
 
 
 def build_health_queries(recipe: Recipe) -> list[str]:
-    """Uma consulta para cada parte da receita: massa, recheio e preparo."""
-    return [recipe.dough, recipe.filling, recipe.preparation]
+    """Monta três consultas sobre riscos da massa, do recheio e do preparo."""
+
+    return [
+        (
+            f"Quais são os riscos e contraindicações da ingestão "
+            f"dos componentes desta massa: {recipe.dough}?"
+        ),
+        (
+            f"Quais são os riscos e contraindicações da ingestão "
+            f"dos componentes deste recheio: {recipe.filling}?"
+        ),
+        (
+            f"Quais são os riscos à saúde associados a este modo de preparo: "
+            f"{recipe.preparation}?"
+        ),
+    ]
 
 
 def simulated_health_search(query: str) -> list[dict[str, Any]]:
-    """Substituto da etapa 8. Não consulta fontes reais; a busca web entra na etapa 9."""
+    """Simula uma pesquisa sem resultados para testes sem acesso à rede."""
+
     return []
