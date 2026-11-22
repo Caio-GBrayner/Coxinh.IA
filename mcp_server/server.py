@@ -25,7 +25,7 @@ from src.graph.resource_validation import (
     ResourceValidationResult,
     validate_recipe_resources,
 )
-from src.graph.workflow import InMemoryWorkflow
+from src.recipe_session import RecipeSession
 from src.schemas import Recipe
 
 
@@ -140,7 +140,7 @@ def _register_search(mcp: FastMCP, web_search: WebSearch) -> None:
         )
 
 
-def _register_impasse(mcp: FastMCP, workflow: InMemoryWorkflow) -> None:
+def _register_impasse(mcp: FastMCP, session: RecipeSession) -> None:
     @mcp.tool(
         name="record_impasse_decision",
         description=(
@@ -173,7 +173,7 @@ def _register_impasse(mcp: FastMCP, workflow: InMemoryWorkflow) -> None:
 
         try:
             state = await asyncio.to_thread(
-                workflow.submit_impasse_decision, thread_id, decision
+                session.submit_impasse_decision, thread_id, decision
             )
         except KeyError as exc:
             raise tool_error(
@@ -209,14 +209,14 @@ def create_server(
     *,
     image_service: ImageService | None = None,
     web_search: WebSearch | None = None,
-    workflow: InMemoryWorkflow | None = None,
+    session: RecipeSession | None = None,
     name: str = "coxinh-ia-tools",
 ) -> FastMCP:
     """Cria o servidor com as ferramentas cujas dependências foram informadas.
 
     `validate_recipe_resources` sempre existe. As demais só são registradas
     quando a dependência correspondente é passada. `record_impasse_decision`
-    exige o workflow da aplicação e, por isso, só roda no processo dela.
+    exige a sessão da aplicação para registrar as receitas no mesmo histórico.
     """
     # mask_error_details impede que mensagens de exceções inesperadas vazem
     # para o cliente. Apenas os erros do contrato (tool_error) passam intactos.
@@ -226,8 +226,8 @@ def create_server(
         _register_image(mcp, image_service)
     if web_search is not None:
         _register_search(mcp, web_search)
-    if workflow is not None:
-        _register_impasse(mcp, workflow)
+    if session is not None:
+        _register_impasse(mcp, session)
     return mcp
 
 

@@ -25,7 +25,7 @@ Complementa `docs/plano_execucao_coxinh_ia.md` (etapa 10 e seção 6). Em caso d
 
 Os dois serviços não compartilham arquivo SQLite. A aplicação chama o `mcp` por HTTP, por exemplo em `http://mcp:8000/mcp`.
 
-**Estado do Impasse (proposta, a confirmar).** O estado vive na aplicação (`InMemoryWorkflow`, em `src/graph/workflow.py`), e o plano proíbe criar uma segunda cópia dele no servidor. Por isso `record_impasse_decision` fica no processo da aplicação, que a expõe pela mesma interface de ferramenta, sem passar pelo container `mcp`.
+**Estado do Impasse.** O estado vive na aplicação (`InMemoryWorkflow`, em `src/graph/workflow.py`), e o plano proíbe criar uma segunda cópia dele no servidor. Por isso `record_impasse_decision` fica no processo da aplicação, que a expõe pela mesma interface de ferramenta, sem passar pelo container `mcp`. Registrar a ferramenta com `create_server(session=session)`, reutilizando a mesma `RecipeSession` da aplicação.
 
 **Ordem de entrega.** Primeiro tudo em memória, como MVP. Depois, a persistência em SQLite como etapa própria (ver `docs/CONTEXTO_MIGRACAO_PERSISTENCIA.md`).
 
@@ -74,7 +74,7 @@ Códigos de erro previstos:
 ### 4.2 `record_impasse_decision`
 
 * **Objetivo:** registrar a ação humana no Impasse.
-* **Lógica:** `InMemoryWorkflow.submit_impasse_decision` (etapa 6). A ferramenta não grava estado por conta própria.
+* **Lógica:** `RecipeSession.submit_impasse_decision`, que delega ao workflow da etapa 6 e registra receitas concluídas no histórico da sessão.
 * **Acionamento:** somente pela aplicação, a partir de uma ação humana identificada. **Nunca é oferecida ao modelo** como ferramenta, para que ele não invente uma autorização do usuário.
 
 **Entrada**

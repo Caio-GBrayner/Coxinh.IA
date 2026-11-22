@@ -10,7 +10,7 @@ from mcp_server.images import (
     SimulatedImageProvider,
 )
 from mcp_server.server import create_server
-from src.graph.workflow import InMemoryWorkflow
+from src.recipe_session import RecipeSession
 from src.mcp_client import McpToolClient, McpToolError
 from src.schemas import Recipe
 
@@ -37,7 +37,7 @@ def full_server(**overrides):
     options = {
         "image_service": ImageService(SimulatedImageProvider()),
         "web_search": lambda query: [],
-        "workflow": InMemoryWorkflow(),
+        "session": RecipeSession(),
     }
     options.update(overrides)
     return create_server(**options)
