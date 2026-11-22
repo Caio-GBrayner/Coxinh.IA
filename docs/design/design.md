@@ -58,9 +58,9 @@ O letreiro grande continua sendo **Coxinh.IA**. A marca Deloitte é um elemento 
 
 Logo abaixo da abertura, a seção **“Da Deloitte à Coxinh.IA”** apresenta um bloco editorial com título em grande escala, moldura fina preta, detalhe verde deslocado e uma fotografia de coxinha sobreposta à borda. O texto começa com uma frase em destaque sobre a origem no bootcamp e segue em poucos parágrafos, com largura confortável para leitura. O fundo claro sustenta o contraste com a abertura escura. O texto histórico final depende da revisão de João e Caio.
 
-Em seguida aparecem a ilustração da turma e a foto real que serviu de base. Usar enquadramentos próximos e molduras com leves deslocamentos para relacionar as duas imagens ao rolar. No celular, empilhar os blocos e preservar títulos e texto inteiros.
+Em seguida aparecem a ilustração da turma em `docs/design/turma_ilustrada.png` e a foto real que serviu de base em `docs/design/turma_bootcamp.png`. Usar enquadramentos próximos e molduras com leves deslocamentos para relacionar as duas imagens ao rolar. No celular, empilhar os blocos e preservar títulos e texto inteiros.
 
-A foto de João e Caio aparece no bloco **“A dupla por trás do Coxinh.IA”**, com título expressivo e moldura de fotografia. Os espaços reservados nos rascunhos representam as fotos que serão fornecidas. As fotos finais, a ilustração e o texto da história entram quando o material for selecionado.
+A foto de João e Caio aparece no bloco **“A dupla por trás do Coxinh.IA”**, com título expressivo e moldura de fotografia. A foto da dupla ainda será selecionada; o espaço reservado no rascunho representa esse ativo pendente.
 
 ## 6. Montagem
 

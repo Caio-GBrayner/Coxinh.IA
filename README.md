@@ -1,21 +1,82 @@
-<div align="center">
+# Coxinh.IA
 
-<p>
-  <img src="./docs/design/Coxinh.IA%20%20logo%20nome.png" alt="Coxinh.IA" width="520">
+<p align="center">
+  <img src="./docs/design/Coxinh.IA%20%20logo%20nome.png" alt="Marca Coxinh.IA" width="520">
 </p>
 
-<h1>
-  <strong>O melhor harness de IA para as coxinhas mais sem sentido que você possa imaginar.</strong>
-</h1>
+**O melhor harness de IA para as coxinhas mais sem sentido que você possa imaginar.**
 
+O Coxinh.IA transforma ingredientes e ideias improváveis em receitas de coxinha. É um projeto de humor e sátira criado para estudar fluxos com agentes de IA: a receita pode ser absurda, mas o sistema precisa mostrar como chegou ao resultado e apresentar o aconselhamento de consumo com suas fontes e incertezas.
 
-<h3 align="left">
-  Uma sátira à mania de colocar IA em tudo, até na coxinha.
-  Neste <strong>harness multiagente</strong>, o Chef inventa uma receita com o que tem na cozinha,
-  o Subchef questiona a proposta e, se der impasse, sobra para você decidir se a ideia merece ser empanada.
-</h3>
+**Estado atual:** o fluxo em Python, os testes e as ferramentas MCP estão implementados. A interface web, a geração de imagem por um provedor real e a observabilidade com Langfuse estão planejadas nas próximas etapas. A imagem retornada hoje é uma referência simulada.
 
-[![pt-BR](https://img.shields.io/badge/lang-pt--BR-green.svg)](./docs/README.pt-br.md)
-[![en](https://img.shields.io/badge/lang-en-red.svg)](./README.md)
+## Como a receita é criada
 
-</div>
+1. **Chef:** propõe uma receita estruturada a partir da entrada da pessoa.
+2. **SubChef:** revisa a proposta. Se precisar de mudanças, o Chef tenta novamente, com no máximo duas revisões.
+3. **Impasse:** quando a revisão não consegue avançar, pausa a execução para a pessoa adicionar orientações ou ingredientes, salvar, retomar ou encerrar. A retomada volta ao Chef e ao SubChef.
+4. **Cozinheiro:** transforma a receita aprovada em título, subtítulo, passos e descrição visual, sem trocar recursos por conta própria.
+5. **Saúde:** pesquisa massa, recheio e preparo na web e produz um aconselhamento informativo, com fontes e incerteza quando cabível. Não altera a receita nem decide se ela pode ser consumida.
+6. **Imagem:** chama a ferramenta MCP de geração. Nesta versão, o provedor é simulado e devolve uma referência `simulated://`. Uma falha de imagem não impede a finalização.
+7. **Finalização:** reúne receita, aconselhamento e estado da imagem em `final_response`.
+
+O fluxo está montado em [`src/graph/builder.py`](./src/graph/builder.py). [`RecipeSession`](./src/recipe_session.py) coordena cada execução e guarda as receitas concluídas em um histórico em memória. Um novo pedido precisa de um novo `thread_id`; uma decisão de Impasse usa o identificador da execução pausada.
+
+## Instalar e testar
+
+Requer Python 3.11 ou superior. Os comandos abaixo são para PowerShell, executados na raiz do repositório:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+python -m pytest -q
+```
+
+O primeiro comando cria o ambiente virtual, o segundo o ativa, o terceiro instala o projeto e as dependências de desenvolvimento, e o último executa os testes. Em Linux ou macOS, use `python3 -m venv .venv` e `source .venv/bin/activate` no lugar dos dois primeiros comandos.
+
+Os testes usam modelos e pesquisas simulados: não exigem chaves e não devem fazer chamadas externas.
+
+## Configurar uma execução real
+
+Copie [`.env.example`](./.env.example) para um arquivo `.env` **na raiz do projeto**. Preencha `LLM_KEY` e `LLM_MODEL` com uma chave e um modelo compatíveis com a integração Groq. Preencha `TAVILY_API_KEY` para a pesquisa do agente de saúde. Não envie o `.env` ao Git.
+
+`MCP_SERVER_URL` pode ficar vazio para usar as ferramentas MCP no mesmo processo. Para conectar a um servidor HTTP separado, informe uma URL como `http://127.0.0.1:8000/mcp` e execute `python -m mcp_server.server` em outro terminal. O servidor padrão oferece validação de recursos e **imagem simulada**; a ferramenta de busca web do MCP só é registrada quando uma função de busca é fornecida explicitamente. O nó de saúde consulta Tavily diretamente.
+
+Com o ambiente configurado, a API Python da versão atual pode ser experimentada em um terminal interativo:
+
+```python
+from src.recipe_session import RecipeSession
+from src.state import create_initial_state
+
+session = RecipeSession()
+state = create_initial_state("Coxinha de maçã com ração", "receita-1")
+result = session.start(state)
+print(result["status"])
+print(result.get("final_response"))
+```
+
+`create_initial_state` monta a entrada e define o limite inicial de duas revisões. `session.start` executa o grafo até concluir ou aguardar uma decisão no Impasse. `result` contém o estado atual; `final_response` só aparece ao concluir. Consulte `session.get_state("receita-1")` para ler essa execução e `session.history.list_recipes()` para listar receitas concluídas na mesma instância. O fluxo pode chamar provedores externos e consumir cotas gratuitas conforme sua configuração.
+
+## Estrutura principal
+
+| Caminho | Função |
+| --- | --- |
+| `src/schemas.py`, `src/state.py` | Contratos da receita e estado compartilhado do grafo. |
+| `src/graph/nodes/`, `src/graph/builder.py` | Agentes, geração da imagem e rotas do fluxo. |
+| `src/graph/workflow.py`, `src/recipe_session.py` | Checkpoint, retomada do Impasse e histórico da sessão. |
+| `src/utils/web_search.py` | Adaptador de pesquisa Tavily usado pelo agente de saúde. |
+| `mcp_server/` | Ferramentas de validação, imagem simulada e interfaces opcionais de busca e Impasse. |
+| `tests/` | Verificações automatizadas, sem necessidade de chamadas pagas. |
+| `docs/design/design.md` | Especificação visual da futura interface. |
+| `docs/plano_execucao_coxinh_ia.md` | Etapas, responsabilidades e critérios de conclusão. |
+
+## Limites da versão atual
+
+O histórico e os checkpoints vivem em memória: são preservados enquanto a mesma instância da aplicação estiver ativa e desaparecem quando o processo termina. Ainda não existe banco de dados nem persistência entre reinícios. Não há interface web pronta para navegar pelas receitas. O provedor de imagem real e o Langfuse também não estão integrados; a documentação será atualizada quando essas etapas forem concluídas.
+
+O parecer de saúde é informativo. Trechos encontrados na web exigem interpretação cuidadosa e não tornam uma receita segura para consumo. A presença de uma URL indica a origem do trecho utilizado, sem certificar a qualidade da fonte.
+
+## Projeto
+
+Desenvolvido por João Santos e Caio Brayner para praticar engenharia de IA durante o bootcamp da Deloitte. A ideia nasceu de uma piada da turma sobre a coxinha da padaria do Moinho e da brincadeira da dupla de transformar qualquer ideia em um sistema de IA. A identidade e as telas planejadas estão em [`docs/design/design.md`](./docs/design/design.md).
