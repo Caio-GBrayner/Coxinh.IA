@@ -3,6 +3,10 @@ from unittest.mock import Mock
 from langchain_core.runnables import RunnableLambda
 import pydantic
 import pytest
+from pydantic import SecretStr
+
+from src.config import TavilyConfig
+from src.utils import web_search
 
 from src.graph.nodes import health
 from src.graph.nodes.health import HealthAdvice, HealthSource, health_node
@@ -10,7 +14,25 @@ from src.schemas import Recipe
 from src.state import create_initial_state
 
 
+DOUGH_QUERY = (
+    "Quais são os riscos e contraindicações da ingestão "
+    "dos componentes desta massa: Potato dough?"
+)
+
+FILLING_QUERY = (
+    "Quais são os riscos e contraindicações da ingestão "
+    "dos componentes deste recheio: Chicken?"
+)
+
+PREPARATION_QUERY = (
+    "Quais são os riscos à saúde associados a este modo de preparo: "
+    "Boil the potatoes and shape the dough.?"
+)
+
+
 def create_recipe():
+    """Cria uma receita fixa para os testes do agente de saúde."""
+
     return Recipe(
         dough="Potato dough",
         filling="Chicken",
@@ -22,27 +44,35 @@ def create_recipe():
 
 
 def create_advice(**overrides):
+    """Cria um aviso simulado e permite alterar campos por cenário."""
+
     values = {
         "health_warning": "Aviso culinário não oficial: consumo com moderação.",
-        "contraindications": ["Pessoas com alergia a frango."],
+        "contraindications": ["Contraindicação fictícia para teste."],
         "possible_effects": [],
         "sources_used": [
             {"title": "Fonte A", "url": "https://example.test/a"},
         ],
-        "uncertainty": "Confiança alta nas fontes consultadas.",
+        "uncertainty": "Confiança alta nas fontes simuladas.",
     }
     values.update(overrides)
     return HealthAdvice(**values)
 
 
 def retrieved_item(title="Fonte A", url="https://example.test/a"):
-    return {"title": title, "url": url, "content": "trecho"}
+    """Cria um trecho de fonte usado nas respostas simuladas da busca."""
+
+    return {"title": title, "url": url, "content": "trecho simulado"}
 
 
 def mock_structured_model(monkeypatch, output, *, error=None):
+    """Substitui a LLM e registra as mensagens enviadas pelo nó."""
+
     messages = []
 
     def invoke(prompt_value):
+        """Registra o prompt e devolve a saída ou lança o erro programado."""
+
         messages.extend(prompt_value.to_messages())
         if error is not None:
             raise error
@@ -51,16 +81,22 @@ def mock_structured_model(monkeypatch, output, *, error=None):
     structured_model = RunnableLambda(invoke)
     chat_model = Mock()
     chat_model.with_structured_output.return_value = structured_model
+
     mocked_call_llm = Mock(return_value=chat_model)
     monkeypatch.setattr(health, "call_llm", mocked_call_llm)
+
     return chat_model, mocked_call_llm, messages
 
 
 def mock_search(monkeypatch, results_by_query=None):
+    """Simula resultados por consulta e registra as pesquisas solicitadas."""
+
     queries = []
     results_by_query = results_by_query or {}
 
     def search(query):
+        """Registra a consulta e devolve suas fontes simuladas."""
+
         queries.append(query)
         return list(results_by_query.get(query, []))
 
@@ -69,15 +105,20 @@ def mock_search(monkeypatch, results_by_query=None):
 
 
 def create_state():
+    """Cria um estado com uma receita disponível para avaliação."""
+
     state = create_initial_state("Make a coxinha.", "conversation-1")
     state["recipe"] = create_recipe()
     return state
 
 
 def test_health_returns_only_health_keys_and_keeps_recipe(monkeypatch):
+    """Verifica que o nó devolve apenas campos de saúde e preserva a receita."""
+
     state = create_state()
     original_recipe = state["recipe"]
-    mock_search(monkeypatch, {"Potato dough": [retrieved_item()]})
+
+    mock_search(monkeypatch, {DOUGH_QUERY: [retrieved_item()]})
     mock_structured_model(monkeypatch, create_advice())
 
     result = health_node(state)
@@ -94,23 +135,33 @@ def test_health_returns_only_health_keys_and_keeps_recipe(monkeypatch):
 
 
 def test_health_runs_three_queries_for_dough_filling_and_preparation(monkeypatch):
+    """Verifica as três perguntas enviadas à busca, na ordem esperada."""
+
     state = create_state()
     queries = mock_search(monkeypatch)
-    mock_structured_model(monkeypatch, create_advice(sources_used=[], uncertainty="Sem fontes."))
+    mock_structured_model(
+        monkeypatch,
+        create_advice(sources_used=[], uncertainty="Sem fontes."),
+    )
 
     health_node(state)
 
     assert queries == [
-        "Potato dough",
-        "Chicken",
-        "Boil the potatoes and shape the dough.",
+        DOUGH_QUERY,
+        FILLING_QUERY,
+        PREPARATION_QUERY,
     ]
 
 
 def test_health_uses_default_simulated_search_without_network(monkeypatch):
+    """Verifica o comportamento com a pesquisa simulada sem fontes."""
+
     state = create_state()
     monkeypatch.setattr(health, "HEALTH_SEARCH", health.simulated_health_search)
-    mock_structured_model(monkeypatch, create_advice(sources_used=[], uncertainty="Sem fontes."))
+    mock_structured_model(
+        monkeypatch,
+        create_advice(sources_used=[], uncertainty="Sem fontes."),
+    )
 
     result = health_node(state)
 
@@ -119,6 +170,8 @@ def test_health_uses_default_simulated_search_without_network(monkeypatch):
 
 
 def test_health_calls_model_with_fixed_temperature_and_schema(monkeypatch):
+    """Verifica a temperatura e o schema usados na chamada ao modelo."""
+
     state = create_state()
     mock_search(monkeypatch)
     chat_model, mocked_call_llm, _ = mock_structured_model(
@@ -132,9 +185,12 @@ def test_health_calls_model_with_fixed_temperature_and_schema(monkeypatch):
 
 
 def test_health_input_excludes_original_request(monkeypatch):
+    """Verifica que a solicitação original fica fora do contexto de saúde."""
+
     state = create_initial_state("SECRET_REQUEST_TEXT", "conversation-1")
     state["recipe"] = create_recipe()
-    mock_search(monkeypatch, {"Potato dough": [retrieved_item()]})
+
+    mock_search(monkeypatch, {DOUGH_QUERY: [retrieved_item()]})
     _, _, messages = mock_structured_model(monkeypatch, create_advice())
 
     health_node(state)
@@ -143,9 +199,15 @@ def test_health_input_excludes_original_request(monkeypatch):
 
 
 def test_health_drops_source_not_present_in_retrieved_context(monkeypatch):
+    """Verifica que fontes inventadas são descartadas."""
+
     state = create_state()
-    mock_search(monkeypatch, {"Potato dough": [retrieved_item()]})
-    fabricated = {"title": "Fonte inventada", "url": "https://invented.test/x"}
+    mock_search(monkeypatch, {DOUGH_QUERY: [retrieved_item()]})
+
+    fabricated = {
+        "title": "Fonte inventada",
+        "url": "https://invented.test/x",
+    }
     mock_structured_model(
         monkeypatch,
         create_advice(sources_used=[fabricated]),
@@ -158,11 +220,16 @@ def test_health_drops_source_not_present_in_retrieved_context(monkeypatch):
 
 
 def test_health_without_sources_is_insufficient_with_uncertainty(monkeypatch):
+    """Verifica que a ausência de fontes resulta em evidência insuficiente."""
+
     state = create_state()
     mock_search(monkeypatch)
     mock_structured_model(
         monkeypatch,
-        create_advice(sources_used=[], uncertainty="Nenhuma fonte relevante."),
+        create_advice(
+            sources_used=[],
+            uncertainty="Nenhuma fonte relevante.",
+        ),
     )
 
     result = health_node(state)
@@ -173,10 +240,17 @@ def test_health_without_sources_is_insufficient_with_uncertainty(monkeypatch):
 
 
 def test_health_model_failure_is_unavailable_and_keeps_recipe(monkeypatch):
+    """Verifica que uma falha da LLM preserva a receita."""
+
     state = create_state()
     original_recipe = state["recipe"]
+
     mock_search(monkeypatch)
-    mock_structured_model(monkeypatch, None, error=RuntimeError("boom"))
+    mock_structured_model(
+        monkeypatch,
+        None,
+        error=RuntimeError("boom"),
+    )
 
     result = health_node(state)
 
@@ -187,9 +261,13 @@ def test_health_model_failure_is_unavailable_and_keeps_recipe(monkeypatch):
 
 
 def test_health_search_failure_is_unavailable(monkeypatch):
+    """Verifica que uma falha de busca impede a chamada à LLM de saúde."""
+
     state = create_state()
 
     def failing_search(query):
+        """Simula uma indisponibilidade do serviço de pesquisa."""
+
         raise ConnectionError("search down")
 
     monkeypatch.setattr(health, "HEALTH_SEARCH", failing_search)
@@ -203,6 +281,8 @@ def test_health_search_failure_is_unavailable(monkeypatch):
 
 
 def test_health_requires_a_recipe():
+    """Verifica que o nó exige uma receita no estado."""
+
     state = create_initial_state("Make a coxinha.", "conversation-1")
 
     with pytest.raises(ValueError, match="requires a recipe"):
@@ -210,6 +290,8 @@ def test_health_requires_a_recipe():
 
 
 def test_advice_accepts_empty_contraindications_when_unsupported():
+    """Verifica que o aviso permite uma lista vazia de contraindicações."""
+
     advice = create_advice(
         contraindications=[],
         uncertainty="Nenhuma contraindicação sustentada pelas fontes.",
@@ -219,8 +301,10 @@ def test_advice_accepts_empty_contraindications_when_unsupported():
 
 
 def test_health_passes_empty_contraindications_through(monkeypatch):
+    """Verifica que o nó preserva a lista vazia de contraindicações."""
+
     state = create_state()
-    mock_search(monkeypatch, {"Potato dough": [retrieved_item()]})
+    mock_search(monkeypatch, {DOUGH_QUERY: [retrieved_item()]})
     mock_structured_model(
         monkeypatch,
         create_advice(
@@ -236,23 +320,34 @@ def test_health_passes_empty_contraindications_through(monkeypatch):
 
 
 def test_advice_without_sources_must_declare_uncertainty():
+    """Verifica que um aviso sem fontes precisa declarar incerteza."""
+
     with pytest.raises(pydantic.ValidationError):
         create_advice(sources_used=[], uncertainty=None)
 
 
 def test_source_requires_title():
+    """Verifica que uma fonte precisa de título preenchido."""
+
     with pytest.raises(pydantic.ValidationError):
         HealthSource(title="   ", url="https://example.test/a")
 
 
 def test_source_requires_url():
+    """Verifica que uma fonte precisa de URL."""
+
     with pytest.raises(pydantic.ValidationError):
         HealthSource(title="Fonte A")
 
 
 def test_retrieved_item_without_url_is_not_a_source(monkeypatch):
+    """Verifica que um trecho sem URL não entra nas fontes utilizadas."""
+
     state = create_state()
-    mock_search(monkeypatch, {"Potato dough": [retrieved_item(url=None)]})
+    mock_search(
+        monkeypatch,
+        {DOUGH_QUERY: [retrieved_item(url=None)]},
+    )
     mock_structured_model(
         monkeypatch,
         create_advice(sources_used=[{"title": "Fonte A"}]),
@@ -265,8 +360,10 @@ def test_retrieved_item_without_url_is_not_a_source(monkeypatch):
 
 
 def test_source_cited_by_title_receives_retrieved_url(monkeypatch):
+    """Verifica a recuperação da URL de uma fonte citada apenas pelo título."""
+
     state = create_state()
-    mock_search(monkeypatch, {"Chicken": [retrieved_item()]})
+    mock_search(monkeypatch, {FILLING_QUERY: [retrieved_item()]})
     mock_structured_model(
         monkeypatch,
         create_advice(sources_used=[{"title": "Fonte A"}]),
@@ -278,3 +375,38 @@ def test_source_cited_by_title_receives_retrieved_url(monkeypatch):
         {"title": "Fonte A", "url": "https://example.test/a"}
     ]
     assert result["health_status"] == "ok"
+
+def test_health_usa_adaptador_web_nas_tres_consultas(monkeypatch):
+    """Verifica a integração entre o nó de saúde e o adaptador do Tavily."""
+
+    config = TavilyConfig(api_key=SecretStr("chave-de-teste"))
+    monkeypatch.setattr(web_search, "load_tavily_config", lambda: config)
+
+    client = Mock()
+    client.search.return_value = {
+        "results": [
+            {
+                "title": "Fonte A",
+                "url": "https://example.test/a",
+                "content": "Evidência simulada para o aviso.",
+            }
+        ]
+    }
+    monkeypatch.setattr(web_search, "TavilyClient", Mock(return_value=client))
+    monkeypatch.setattr(health, "HEALTH_SEARCH", web_search.search_web)
+
+    _, _, messages = mock_structured_model(monkeypatch, create_advice())
+
+    result = health_node(create_state())
+
+    queries = [
+        chamada.kwargs["query"]
+        for chamada in client.search.call_args_list
+    ]
+
+    assert queries == [DOUGH_QUERY, FILLING_QUERY, PREPARATION_QUERY]
+    assert "Evidência simulada para o aviso." in messages[1].content
+    assert result["health_status"] == "ok"
+    assert result["health_sources"] == [
+        {"title": "Fonte A", "url": "https://example.test/a"}
+    ]
