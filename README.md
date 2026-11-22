@@ -8,7 +8,7 @@
 
 O Coxinh.IA transforma ingredientes e ideias improváveis em receitas de coxinha. É um projeto de humor e sátira criado para estudar fluxos com agentes de IA: a receita pode ser absurda, mas o sistema precisa mostrar como chegou ao resultado e apresentar o aconselhamento de consumo com suas fontes e incertezas.
 
-**Estado atual:** o fluxo em Python, os testes e as ferramentas MCP estão implementados. A interface web, a geração de imagem por um provedor real e a observabilidade com Langfuse estão planejadas nas próximas etapas. A imagem retornada hoje é uma referência simulada.
+**Estado atual:** o fluxo Python, a API FastAPI e a interface React estão implementados. A interface permite criar receitas, resolver o Impasse e consultar o histórico da sessão. O aceite visual ainda depende da revisão dos recortes e dos ativos pendentes; a geração real de imagens pertence à etapa 10.1 e Langfuse à etapa 12. A imagem retornada hoje é uma referência simulada.
 
 ## Como a receita é criada
 
@@ -58,6 +58,38 @@ print(result.get("final_response"))
 
 `create_initial_state` monta a entrada e define o limite inicial de duas revisões. `session.start` executa o grafo até concluir ou aguardar uma decisão no Impasse. `result` contém o estado atual; `final_response` só aparece ao concluir. Consulte `session.get_state("receita-1")` para ler essa execução e `session.history.list_recipes()` para listar receitas concluídas na mesma instância. O fluxo pode chamar provedores externos e consumir cotas gratuitas conforme sua configuração.
 
+## Executar a interface web
+
+Na raiz do projeto, com as dependências Python instaladas e o `.env` configurado:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn src.api:app --host 127.0.0.1 --port 8000
+```
+
+Em outro terminal PowerShell, a partir da raiz (Node.js 24 foi usado na validação):
+
+```powershell
+Set-Location -LiteralPath .\frontend
+npm.cmd ci
+npm.cmd run dev -- --host 127.0.0.1
+```
+
+Abra o endereço impresso pelo Vite, normalmente `http://127.0.0.1:5173`. O proxy `/api` aponta para `127.0.0.1:8000`. Use `npm.cmd` para evitar o bloqueio de `npm.ps1` pela política de execução do PowerShell. Chaves ficam somente no backend. A API web e o MCP HTTP separado não podem ocupar a mesma porta; o MCP no mesmo processo não exige outro servidor.
+
+Validação, a partir da raiz:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+Set-Location -LiteralPath .\frontend
+npm.cmd run build
+npm.cmd run lint
+npm.cmd test
+```
+
+Os testes de navegador usam Microsoft Edge instalado, Vite em `5174` e a API real em `8001`, com agentes externos simulados por `tests/browser_api.py`. Nenhuma chamada paga é feita. `npm.cmd run test:visual` refaz as capturas de 1440, 1024, 768 e 390 pixels em `docs/design/review/`. Para Chrome instalado, defina `$env:PLAYWRIGHT_CHANNEL = "chrome"`. Feche serviços de teste anteriores nessas portas antes de iniciar a suíte.
+
+O [relatório da etapa 11](docs/design/review/etapa-11.md) reúne evidências, arquivos alterados e limites. Os textos fixos estão em `frontend/src/content.ts`; receitas, saúde e imagens vêm da API.
+
 ## Estrutura principal
 
 | Caminho | Função |
@@ -73,7 +105,9 @@ print(result.get("final_response"))
 
 ## Limites da versão atual
 
-O histórico e os checkpoints vivem em memória: são preservados enquanto a mesma instância da aplicação estiver ativa e desaparecem quando o processo termina. Ainda não existe banco de dados nem persistência entre reinícios. Não há interface web pronta para navegar pelas receitas. O provedor de imagem real e o Langfuse também não estão integrados; a documentação será atualizada quando essas etapas forem concluídas.
+O histórico e os checkpoints vivem em memória: são preservados enquanto a mesma instância da aplicação estiver ativa e desaparecem quando o processo termina. Ainda não existe banco de dados nem persistência entre reinícios. A interface guarda apenas o ID ativo e a posição do carrossel na aba, consultando a API ao recarregar. O provedor real de imagens e Langfuse não estão integrados.
+
+Uma falha de rede após `POST /api/recipes` pode deixar uma execução aceita sem o ID ter chegado ao navegador: o contrato atual só entrega o ID ao retornar. A interface consulta o histórico e não repete o POST automaticamente, mas não consegue recuperar uma execução pausada cujo ID nunca recebeu. Isso exige evolução futura do contrato de criação. No Impasse, o ID já conhecido permite consultar o estado após falha ou conflito.
 
 O parecer de saúde é informativo. Trechos encontrados na web exigem interpretação cuidadosa e não tornam uma receita segura para consumo. A presença de uma URL indica a origem do trecho utilizado, sem certificar a qualidade da fonte.
 

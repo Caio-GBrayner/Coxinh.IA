@@ -153,3 +153,32 @@ Antes de encerrar a implementação de cada tela, verificar no navegador ao meno
 9. A interface funciona com teclado, foco visível, ampliação de texto e preferência por movimento reduzido. Cada estado tem um rótulo textual.
 10. O texto comum atende contraste mínimo de 4,5:1 e o texto grande, 3:1. [W3C, contraste mínimo](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 11. O personagem fictício acompanha o aconselhamento sem sugerir credencial ou endosso médico real; aviso, incerteza e fontes continuam compreensíveis sem a imagem.
+
+## 12. Aplicação da etapa 11
+
+Esta especificação descreve a experiência e a direção visual. Os comportamentos verificáveis estão em [`requirements.md`](requirements.md), e a sequência de trabalho está em [`tasks.md`](tasks.md). [`conteudo_interface.md`](conteudo_interface.md) concentra os textos fixos. A etapa usa o frontend React com TypeScript e Vite em `frontend/`, com estilos CSS próprios, e a API FastAPI em `src/api.py` já preparada nesta branch. O Codex deve conferir os arquivos reais antes de modificar o contrato; não criar uma segunda API, outra implementação do histórico ou uma segunda fonte divergente para os textos.
+
+### 12.1 Composição e ativos finais
+
+| Região | Implementação visual | Ativos e limite |
+| --- | --- | --- |
+| Cabeçalho | Símbolo e assinatura Coxinh.IA à esquerda; Home, Suas receitas, História e ação de criar. | Referências `Coxinh.IA marca.png` e `Coxinh.IA  logo nome.png`. O arquivo original tem fundo incorporado; preparar uma versão com transparência real para uso sobre outra superfície. |
+| Abertura | Card de criação à esquerda; letreiro gigante atrás de uma coxinha aberta à direita. Profundidade por escala e sobreposição. | Usar uma fotografia de coxinha própria ou devidamente autorizada, separada das imagens geradas para as receitas. O recorte precisa ter bordas limpas e canal alfa. |
+| Elementos suspensos | Xícara, marca Deloitte, navio e símbolo Coxinh.IA em quatro posições distintas, afastados do formulário. | `cafe.jpg`, `deloitte.jpg`, `navio.png` e `Coxinh.IA marca.png` são referências em `docs/design/`. Converter em ativos de produção antes de exibir. Não usar quadriculado, fundo branco gravado ou marca d'água. Não redesenhar os logotipos. |
+| História | Moldura editorial, título de grande escala e sequência ilustração da turma → foto da turma. | `turma_ilustrada.png` e `turma_bootcamp.png`. A foto da dupla ainda depende de seleção; não inventar pessoas ou atribuições. |
+| Receita | Imagem à esquerda no desktop e conteúdo à direita; no celular, título e subtítulo antes da imagem. | Imagem real vinda da API apenas se utilizável; estados simulados, pendentes e falhos recebem composição provisória com texto. |
+| Saúde | Bloco separado da receita com foto de um personagem fictício de médico, expressivo e claramente cenográfico. | A foto do personagem ainda não foi escolhida. A apresentação do aconselhamento deve funcionar sem ela e sem sugerir orientação de um profissional real. |
+
+Os ativos preparados para o navegador devem ficar em uma pasta explícita dentro de `frontend/`, com nomes legíveis e referências únicas no código. Conferir tamanho, nitidez, transparência e autorização de uso antes de integrá-los. Enquanto faltar um recorte aprovado, manter a composição funcional e registrar a pendência; não colocar uma versão com marca d'água para preencher espaço.
+
+### 12.2 Estados visuais ligados ao contrato
+
+O formulário envia texto livre para `POST /api/recipes`. Durante a espera, a montagem mostra o estado textual **Criando receita** e uma sequência 2D fixa, sem percentual ou alegação de evento do grafo. O retorno `completed` abre o resultado, `awaiting_user` abre o Impasse e `cancelled` apresenta encerramento. Falha de rede ou do servidor aparece com ação de recuperação consciente: jamais repetir automaticamente uma criação ou uma decisão cujo resultado possa já ter sido aceito.
+
+O Impasse mostra a crítica recebida, proposta quando existir, orientações e ingredientes já registrados. **Salvar orientação** usa a versão atual, mantém a pausa e não solicita uma nova receita. **Continuar criação** retoma o mesmo `thread_id`; **Encerrar criação** encerra o mesmo fluxo. Conflito de versão exige consultar o estado atual e mostrar o que já foi salvo, preservando os dados ainda digitados.
+
+O histórico mostra somente resultados concluídos da sessão atual, começa pela receita mais recente na apresentação e mantém o mesmo ID de cada card ao navegar. O carrossel volta ao começo ou ao fim pelas setas e pelo deslize, sem duplicar registros ou controles acessíveis. A abertura de um card revela o resultado completo dessa execução. Voltar preserva a posição no carrossel.
+
+### 12.3 Revisão com as referências de design
+
+Usar **UI UX Pro Max** para examinar hierarquia, tipografia e layout responsivo; **Impeccable** para criticar composição, espaçamento e acabamento; as orientações de **Emil Kowalski** para reduzir o movimento ao que esclarece estado e ação; e **Taste Skill** para manter direção visual própria e conferir o resultado no navegador. Aplicar apenas achados que melhorem esta especificação. As referências não impõem nova paleta, novos textos, dependências ou estética genérica. Conferir visualmente Home, História, montagem, Impasse, resultado e galeria em desktop, tablet e celular, também com títulos longos, ausência de imagem, teclado e preferência por movimento reduzido.
