@@ -4,7 +4,7 @@ Este plano divide a implementação entre duas pessoas e estabelece revisão obr
 
 ## 1. Papéis e regra de alternância
 
-* **Pessoa A** e **Pessoa B** são nomes temporários; substituam-nos pelos nomes da dupla.
+* **Pessoa A = Caio** e **Pessoa B = João** para as etapas restantes. O histórico das etapas anteriores permanece registrado nos respectivos PRs.
 * **Code** implementa a atividade, adiciona ou atualiza testes e abre um pull request (PR).
 * **Reviewer** revisa o PR, executa as verificações pertinentes e aprova ou solicita alterações.
 * Quem implementou uma mudança não pode aprovar o próprio trabalho.
@@ -45,12 +45,16 @@ Este plano divide a implementação entre duas pessoas e estabelece revisão obr
 | 6 | Checkpoint, pausa, retomada e conflitos de versão | Pessoa A | Pessoa B |
 | 7 | Cozinheiro e resposta final | Pessoa B | Pessoa A |
 | 8 | Aviso informativo de saúde | Pessoa A | Pessoa B |
-| 9 | RAG, pesquisa web e referências | Pessoa B | Pessoa A |
-| 10 | Servidor MCP, ferramentas e geração de imagem idempotente | Pessoa A | Pessoa B |
-| 11 | Interface Streamlit | Pessoa B | Pessoa A |
-| 12 | Langfuse, integração e robustez | Pessoa A | Pessoa B |
+| 9 | Pesquisa web com Tavily e referências | Pessoa B | Pessoa A |
+| 10 | Servidor MCP, ferramentas e geração de imagem simulada e idempotente | Pessoa A | Pessoa B |
+| 10.1 | Provedor real de imagem e integração final das ferramentas | Caio | João |
+| 11.0 | README e textos fixos da interface | João | Caio |
+| 11 | Interface web do Coxinh.IA | João | Caio |
+| 12 | Langfuse, integração e robustez | Caio | João |
 
 Se uma etapa precisar ser dividida em mais de um PR, mantenham a mesma dupla de Code e Reviewer até concluí-la. A inversão ocorre na etapa seguinte, não a cada PR intermediário.
+
+Na sequência atual, Caio implementa a etapa 10.1 e João revisa. João assume a preparação 11.0 e a interface 11, com revisão de Caio. Caio implementa a etapa 12 e João revisa. A preparação textual 11.0 não depende do provedor real e pode ser desenvolvida em paralelo com a etapa 10.1, mas a interface funcional deve usar os contratos aprovados. Quem escreve um PR não o aprova.
 
 ### Ferramentas que serão expostas pelo MCP
 
@@ -58,13 +62,12 @@ Os nós continuam sendo funções da aplicação, coordenadas pelo LangGraph. O 
 
 | Função MCP | Objetivo | Onde será usada | Construção e integração |
 | --- | --- | --- | --- |
-| `search_knowledge` | Recuperar trechos da base RAG com metadados e referências das fontes. | Fora do escopo por ora: a base RAG foi adiada (decisão 10). | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
-| `search_web` | Consultar fontes na internet e devolver resultados com origem identificável. | Agente de Saúde, depois do Cozinheiro, com três consultas por receita (decisão 4). Provedor: Tavily (decisão 5). | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
+| `search_web` | Consultar fontes na internet e devolver resultados com origem identificável. | Agente de Saúde, depois do Cozinheiro, com três consultas por receita (decisão 4). Provedor: Tavily (decisão 5). | Adaptador real na etapa 9; ferramenta MCP opcional criada na etapa 10, cuja ligação no servidor padrão permanece pendente. O nó de saúde já usa o adaptador diretamente. |
 | `validate_recipe_resources` | Comparar a proposta com os ingredientes, utensílios e meios de preparo autorizados pelo usuário; apontar divergências e substituições. | SubChef e Cozinheiro, antes de finalizar a receita. | Lógica na etapa 2; uso nas etapas 4 e 7; exposição MCP na etapa 10. |
-| `generate_coxinha_image` | Enviar à API de imagem um prompt fiel à receita final, incluindo ingredientes, cores, texturas, formato e modo de preparo. | Cozinheiro, após consolidar a receita e a descrição visual. | Implementação e integração na etapa 10. |
+| `generate_coxinha_image` | Entregar ao provedor um pedido fiel à receita final, incluindo ingredientes, cores, texturas, formato e modo de preparo. | Nó de imagem, depois do aconselhamento de saúde e antes da finalização. | Contrato, idempotência e provedor simulado na etapa 10; provedor real na etapa 10.1. |
 | `record_impasse_decision` | Registrar a ação humana, os ingredientes ou orientações adicionados e a versão esperada do estado. | Aplicação, a partir da interação do usuário enquanto o fluxo estiver no Impasse. | Lógica na etapa 6; exposição MCP na etapa 10; acionamento pela interface na etapa 11. |
 
-As funções de consulta recebem os dados relevantes do estado para montar a busca. Elas devolvem contexto ao nó que as chamou; não precisam carregar a responsabilidade de manter a conversa inteira. Usar uma ferramenta em três nós não significa executá-la obrigatoriamente três vezes em toda receita.
+As funções de consulta recebem os dados relevantes do estado para montar a busca. Elas devolvem contexto ao nó que as chamou; não precisam carregar a responsabilidade de manter a conversa inteira. A base RAG e a ferramenta `search_knowledge` não integram o MVP.
 
 `record_impasse_decision` deve ser acionada pela aplicação a partir de uma ação humana identificada, não por uma decisão autônoma do LLM. Sua implementação deve reutilizar o serviço de atualização do estado da etapa 6, evitando criar uma segunda cópia independente do estado no servidor MCP.
 
@@ -125,7 +128,7 @@ A validação compara as listas estruturadas de ingredientes, utensílios e mét
 
 ### Etapa 3: Configuração e adaptador de LLM
 
-**Arquivos previstos:** `src/coxinh_ia/config.py`, `src/coxinh_ia/llm_adapter.py` e testes com dependências simuladas.
+**Arquivos usados:** `src/config.py`, `src/utils/llm_adapter.py` e testes com dependências simuladas.
 
 **Code:** centraliza leitura e validação de configuração e cria uma interface pequena para chamar o modelo. Permite configurar temperatura por função ou agente; não registra nem versiona chaves de API.
 
@@ -245,48 +248,47 @@ O aviso permanece separado da receita. Ele não aprova, reprova, bloqueia nem mo
 
 **Concluir quando:** testes provam que o resultado de saúde é separado da receita e não interfere na decisão do SubChef ou nas rotas do grafo.
 
-### Etapa 9: RAG, pesquisa web e referências
+### Etapa 9: Pesquisa web com Tavily e referências
 
-**Arquivos previstos:** adaptador de pesquisa web em `src/graph/web_search.py` (sugestão de nome) e testes com cliente simulado. O RAG está fora do escopo desta etapa (decisão 10). Detalhes em `docs/CONTEXTO_ETAPA_9.md`.
+**Arquivos entregues:** `src/utils/web_search.py`, `src/graph/health_search.py`, `src/graph/nodes/health.py`, `src/config.py` e testes. O RAG está fora do escopo do MVP. `docs/CONTEXTO_ETAPA_9.md` é um registro anterior à integração; onde divergir, prevalecem o código integrado e este plano atualizado.
 
-**Code:** cria ingestão e busca sobre um conjunto pequeno de fontes confiáveis, mantendo metadados para identificar a origem dos trechos. Implementa os serviços que serão expostos como `buscar_conhecimento` e `pesquisar_web` na etapa 10.
+**Code:** implementa três consultas web via Tavily, uma para massa, uma para recheio e uma para preparo, somente no nó de saúde após o Cozinheiro. O adaptador `search_web` valida título, URL e conteúdo, limpa o trecho, limita seu tamanho e descarta itens inválidos. A resposta do Tavily é dado externo, não instrução para o modelo.
 
-Cada serviço deve devolver resultados estruturados com conteúdo recuperado, identificação da fonte e referência consultável, como URL ou identificador do documento. A pesquisa web deve ter tratamento de falha e permitir testes com respostas simuladas.
+O adaptador devolve resultados com `title`, `url` e `content`. Nenhum resultado válido é diferente de uma falha de consulta. A falha deixa o aconselhamento `unavailable`; ausência de fundamento pode deixá-lo `insufficient`. Testes simulam o cliente Tavily e o modelo, sem acesso externo.
 
-O Chef e o SubChef podem consultar esses serviços quando precisarem de contexto. O Agente de Saúde utiliza o material relevante para fundamentar o aviso e apresenta somente as fontes efetivamente utilizadas. Ausência de resultado relevante deve ser distinguida de uma falha técnica de consulta.
+Chef e SubChef não fazem pesquisa web nesta etapa. O Agente de Saúde usa o contexto recuperado para montar o aviso e apresenta somente as fontes efetivamente utilizadas. A conferência automática garante que títulos e URLs citados pertencem ao contexto recuperado; a avaliação semântica da fidelidade das afirmações continua sendo um trabalho da etapa 12.
 
-**Reviewer:** verifica qualidade e procedência das fontes, correspondência entre trechos e aviso, comportamento sem resultados relevantes e tratamento de indisponibilidade da pesquisa web. Confirma que os testes não dependem de consultas externas reais.
+**Reviewer:** verifica correspondência entre trechos e aviso, comportamento sem resultados relevantes e tratamento de indisponibilidade da pesquisa web. Confirma que os testes não dependem de consultas externas reais.
 
-**Concluir quando:** os dois serviços têm contratos e testes; o aviso pode indicar as referências usadas e declarar quando as informações recuperadas são insuficientes.
+**Concluída:** PR #16 integrado na `main`. O adaptador tem contrato e testes; o aviso indica referências utilizadas e reconhece informação insuficiente.
 
 **Decisões registradas para esta etapa:**
 
 * Provedor de busca web: **API do Tavily, plano gratuito**. A chave fica em `TAVILY_API_KEY`, definida em `.env` e documentada em `.env.example`. Nunca no código nem em commit.
-* Cota do plano gratuito (informada pelo time, a confirmar no site do Tavily): cerca de 1.000 buscas por mês. Com três consultas por receita, isso dá cerca de 333 receitas por mês, ou 10 por dia. Não há retentativa automática, porque cada tentativa consome cota. Cota esgotada é falha técnica e resulta em `unavailable`.
-* Limites iniciais, ajustáveis por constantes no módulo: 3 resultados por consulta, 500 caracteres por trecho e tempo limite de 10 segundos por consulta.
+* Cota do plano gratuito: confirmar no painel do Tavily antes de projetar volume de uso. Não há retentativa automática no adaptador, porque cada tentativa pode consumir cota. Cota esgotada é falha técnica e resulta em `unavailable`.
+* Limites implementados em `src/utils/web_search.py`: 3 resultados por consulta, 500 caracteres por trecho e tempo limite de 20 segundos por consulta.
 * Consultas: três por receita (massa, recheio e preparo), feitas depois do Cozinheiro, uma vez por execução. Nunca dentro do ciclo do SubChef.
 * Procedência não é critério, por ser um projeto de humor. Título e URL continuam obrigatórios em cada fonte usada.
 * Conteúdo retornado pela web é tratado como dado, nunca como instrução ao modelo.
 * Ausência de resultado relevante e falha técnica são estados distintos.
-* **Decidido (decisão 10):** a base RAG fica fora desta etapa. A pesquisa web via Tavily é a única fonte por ora. `search_knowledge` não é implementada e pode voltar em uma etapa futura.
+* **Decidido (decisão 10):** a base RAG não faz parte do MVP. A pesquisa web via Tavily é a fonte conectada neste fluxo. `search_knowledge` não é implementada.
 
-### Etapa 10: Servidor MCP, ferramentas e geração de imagem idempotente
+### Etapa 10: Servidor MCP, ferramentas e geração de imagem simulada e idempotente
 
 **Arquivos previstos:** `mcp_server/server.py`, cliente MCP na aplicação, armazenamento do resultado de imagem e testes das ferramentas e da chave de idempotência. O contrato detalhado das ferramentas está em `docs/CONTRATO_MCP.md`.
 
 **Decisões registradas para esta etapa:**
 
 * FastMCP (camada sobre o SDK oficial `mcp`), com versão fixada, e transporte streamable HTTP entre os serviços `app` e `mcp` do Docker Compose.
-* O container `mcp` expõe as ferramentas sem estado compartilhado: `validate_recipe_resources`, `generate_coxinha_image` e `search_web`. O estado do Impasse fica na aplicação, então `record_impasse_decision` é exposta pelo processo da aplicação, sem passar pelo container `mcp` (proposta, decisão 17).
-* `search_knowledge` não é implementada enquanto o RAG estiver adiado (decisão 10).
+* O container `mcp` registra por padrão `validate_recipe_resources` e `generate_coxinha_image` com provedor simulado. A ferramenta `search_web` existe no servidor quando a dependência de busca é injetada, mas não está registrada no servidor padrão. O nó de saúde usa diretamente o adaptador Tavily. `record_impasse_decision` fica no processo da aplicação e usa a mesma `RecipeSession` que guarda o histórico.
+* `search_knowledge` não é implementada no MVP (decisão 10).
 * Nó novo `image` no grafo, entre a saúde e a finalização: `cook → health → image → finalize`. Falha de imagem não bloqueia a receita. Não há nó `format_output` separado; o `finalize` continua montando a resposta final (decisão 18).
-* Persistência em SQLite, em dois arquivos: um da aplicação (checkpoints e idempotência do Impasse) e um do `mcp` (índice de imagens), cada um em volume próprio. Vem em etapa própria, depois que as etapas 9 e 10 funcionarem em memória (decisão 13).
+* O MVP mantém checkpoints, histórico e índice de imagens em memória. Persistência durável fica para uma evolução posterior, com decisão própria de armazenamento e ciclo de vida (decisão 13).
 * Idempotência da imagem em memória no MVP, com garantias e limites documentados no contrato.
-* Provedor de imagem simulado até a decisão 12.
-* A etapa pode começar pelas ferramentas que não dependem da etapa 9 (`validate_recipe_resources`, `record_impasse_decision` e `generate_coxinha_image`). `search_web` e `search_knowledge` só são ligadas às funções reais depois que a etapa 9 for aprovada. A branch não é integrada na `main` antes disso.
-* Branch de trabalho: `feat/mcp-tools`.
+* O provedor simulado devolve uma referência `simulated://`; isso não representa uma foto gerada. A ligação a um provedor real fica na etapa 10.1.
+* Branch `feat/mcp-tools` integrada na `main` pelo PR #15, depois do PR #16 da etapa 9.
 
-**Code:** configura o servidor e o cliente MCP e expõe as cinco ferramentas previstas: `search_knowledge`, `search_web`, `validate_recipe_resources`, `generate_coxinha_image` e `record_impasse_decision`.
+**Code:** configura o servidor e o cliente MCP e implementa os contratos de `search_web`, `validate_recipe_resources`, `generate_coxinha_image` e `record_impasse_decision`, com registro condicionado às dependências disponíveis. O nó `image` chama a ferramenta MCP; o `finalize` reúne receita, saúde e estado da imagem.
 
 As implementações das etapas 2, 6 e 9 devem ser reaproveitadas. A integração MCP acrescenta contratos de entrada, saída e erro e o transporte das chamadas, sem duplicar as regras de negócio.
 
@@ -297,25 +299,53 @@ Para a imagem:
 * Receber a receita final e sua descrição visual, produzidas pelo Cozinheiro.
 * Construir um pedido coerente com ingredientes, cores, texturas, formato e modo de preparo definidos.
 * Gerar uma chave estável a partir da entrada canônica relevante para a imagem. Essa entrada deve considerar a receita e os parâmetros que mudam o resultado solicitado.
-* Reutilizar o resultado persistido quando já existir uma imagem para a mesma chave.
+* Reutilizar o resultado guardado em memória quando já existir uma imagem para a mesma chave no processo.
 * Tratar falhas externas e registrar o resultado disponível sem perder a receita final.
 * Documentar as garantias e limitações de repetição, concorrência e falhas entre a resposta do provedor e a gravação local. A chave, sozinha, não garante ausência de duplicação em todos esses cenários.
 
-**Reviewer:** confere o contrato das cinco ferramentas, a passagem de dados entre cliente e servidor, o uso correto da versão no Impasse e o tratamento de erros. Para a imagem, verifica fidelidade do pedido, estabilidade da chave, reutilização do resultado e ausência de chamadas pagas nos testes automatizados.
+**Reviewer:** confere os contratos das quatro ferramentas, o registro efetivo no servidor padrão, a passagem de dados entre cliente e servidor, o uso correto da versão no Impasse e o tratamento de erros. Para a imagem, verifica fidelidade do pedido, estabilidade da chave, reutilização do resultado e ausência de chamadas pagas nos testes automatizados.
 
-**Concluir quando:** as cinco ferramentas podem ser chamadas pelo cliente com testes de sucesso e erro. Chamadas repetidas de imagem reutilizam resultados nos cenários cobertos, com as limitações do provedor e do armazenamento documentadas.
+**Concluída quanto à infraestrutura em memória:** PR #15 integrado na `main`. As ferramentas registradas podem ser chamadas pelo cliente com testes de sucesso e erro; a idempotência cobre o mesmo processo. A ligação opcional da busca no servidor padrão e o provedor real ficam explicitamente pendentes na etapa 10.1.
 
-### Etapa 11: Interface Streamlit
+### Etapa 10.1: Provedor real de imagem e fechamento da integração MCP
 
-**Arquivos previstos:** `src/coxinh_ia/ui/app.py` ou `src/app.py` e testes adequados à interface.
+**Arquivos previstos:** implementação de `ImageProvider` em `mcp_server/`, configuração do provedor e testes com cliente simulado; ajustar `build_default_server` e a documentação do contrato quando necessário.
 
-**Code:** cria entrada em texto livre, acompanhamento de status, apresentação do resultado e formulário de continuação com o mesmo identificador de conversa. A entrada do usuário é encaminhada ao estado usado pelo Chef.
+**Code:** integra um provedor gratuito para gerar imagens utilizáveis pela interface, preservando o contrato `ImageProvider.generate`, a chave de idempotência, o tratamento de falhas e o fluxo `cook → health → image → finalize`. A opção inicial para experimento é **Recraft V4.1 Flash V2 (free)** pelo OpenRouter, cuja variante gratuita está anunciada para retirada em 28/11/2026. A escolha precisa ser substituível. Nunca trocar automaticamente para uma variante paga. Sem provedor gratuito disponível, manter a receita concluída com `image_status` de falha e imagem provisória na interface.
+
+Definir como a imagem retornada será entregue e mantida acessível durante a sessão, inclusive se o provedor devolver dados em base64 ou uma URL temporária. Não expor chaves no navegador, logs ou repositório. A fidelidade visual ao `image_prompt` precisa de revisão humana com receitas absurdas representativas; a idempotência em memória não impede duplicação após reinício ou queda entre geração e registro.
+
+Avaliar se há benefício real em registrar `search_web` no servidor MCP padrão. O nó de saúde já usa `src/utils/web_search.py` diretamente; não trocar esse caminho sem motivo, nem afirmar que uma ferramenta opcional está integrada ao fluxo.
+
+**Reviewer:** verifica resultado utilizável pela interface, falha sem perda da receita, custo zero na configuração escolhida, troca de modelo e testes sem chamadas externas. Confere o vínculo entre a imagem e a receita final.
+
+**Concluir quando:** ao menos uma execução controlada gera imagem real recuperável na sessão, a receita continua disponível quando a imagem falha, e os testes simulados cobrem os contratos. Se a variante gratuita for retirada sem substituta, documentar o bloqueio e manter o fallback visual.
+
+### Etapa 11.0: README e textos fixos da interface
+
+**Arquivos previstos:** `README.md`, documentação de execução em português e um arquivo de conteúdo fixo da interface, em formato e caminho definidos com o frontend. Não criar cópias divergentes do mesmo texto em documentação e código.
+
+**Code (João):** após alinhar este plano, redige o README para explicar o que o Coxinh.IA faz, o fluxo Chef → SubChef → Impasse ou Cozinheiro → Saúde → Imagem → Finalização, a função de cada parte e como instalar, configurar, executar e testar a versão atual. Corrige o link quebrado para a documentação em português. Distingue imagem real de provedor simulado, Langfuse planejado de instrumentação existente e memória de persistência durável. Atualiza comandos quando a interface e o provedor real forem integrados.
+
+Redige também os textos que não vêm da LLM: título e chamada da Home, apresentação do projeto, história **“Da Deloitte à Coxinh.IA”**, bloco **“A dupla por trás do Coxinh.IA”**, rótulos de navegação e ações, estado vazio do carrossel, frases de ambientação da montagem e mensagens de impasse, erro e imagem indisponível. O texto da História precisa ser factual, com informações revisadas por João e Caio; espaços para fotos continuam identificados até a escolha dos ativos. Separar cópia fixa de título, subtítulo, preparo e aviso de saúde gerados pelo fluxo.
+
+**Reviewer (Caio):** confere fidelidade ao projeto, tom de sátira, fatos da História, links, comandos e coerência entre textos e estados reais do backend. Nenhum texto de carregamento deve fingir um evento do grafo que a interface não recebe.
+
+**Concluir quando:** README e textos estão aprovados, com responsáveis e locais de uso definidos. Esta preparação pode avançar em paralelo à etapa 10.1, pois não chama o provedor de imagem.
+
+### Etapa 11: Interface web do Coxinh.IA
+
+**Arquivos previstos:** frontend web com CSS, ativos próprios e testes adequados; a estrutura de pastas e o framework serão definidos no início da etapa. Usar `docs/design/design.md` como especificação visual. Streamlit foi descartado para esta interface.
+
+**Code:** implementa Home, História, montagem, receita pronta e carrossel infinito de receitas concluídas. Preserva a marca Coxinh.IA, os quatro recortes flutuantes definidos no design, a apresentação editorial inspirada no TÒPAS e um acabamento de interface limpo, com acessibilidade e adaptação ao celular. A revisão com UI UX Pro Max auxilia tipografia, espaçamento, contraste e hierarquia, sem substituir a especificação do projeto.
+
+Cria entrada em texto livre, acompanhamento de status, apresentação do resultado e formulário de continuação com o mesmo identificador de conversa. A entrada do usuário é encaminhada ao estado usado pelo Chef. Frases de ambientação da montagem não podem se passar por eventos reais do grafo quando esses eventos não estiverem disponíveis.
 
 No Impasse, a interface permite adicionar ingredientes ou orientações, salvar, retomar ou encerrar. Salvar uma alteração mantém o fluxo pausado; somente a ação explícita de retomar inicia um novo ciclo. A interface apresenta conflitos de versão de forma compreensível e recupera o estado atual sem apagar silenciosamente uma atualização já aceita.
 
-A resposta reúne receita, aviso informativo de saúde, imagem quando disponível e fontes utilizadas. O aviso não deve aparecer como selo de aprovação para consumo.
+A resposta reúne receita, aviso informativo de saúde, imagem quando disponível e fontes utilizadas. O aviso acompanha um personagem médico fictício sem credencial ou endosso profissional real e não aparece como selo de aprovação para consumo. Imagem simulada, pendente ou com falha usa apresentação provisória. O histórico fica em memória na sessão da aplicação; encerrar o processo perde essas receitas, conforme o escopo atual.
 
-**Reviewer:** testa os caminhos principais e verifica que atualizar a página ou continuar não cria uma conversa nova por engano. Confirma que salvar não chama o LLM, que retomar preserva o contexto e que o encerramento é respeitado.
+**Reviewer:** testa os caminhos principais e verifica que atualizar a página ou continuar não cria uma conversa nova por engano enquanto a mesma sessão estiver disponível. Confirma que salvar não chama o LLM, que retomar preserva o contexto, que o encerramento é respeitado e que o carrossel não duplica receitas no histórico.
 
 **Concluir quando:** a interface permite iniciar, acompanhar, atualizar e retomar o fluxo validado nas etapas anteriores, além de apresentar resultados e conflitos corretamente.
 
@@ -323,9 +353,9 @@ A resposta reúne receita, aviso informativo de saúde, imagem quando disponíve
 
 **Arquivos previstos:** configuração de observabilidade, testes de integração e atualizações no README.
 
-**Code:** instrumenta chamadas e etapas relevantes, documenta a execução completa e adiciona verificações finais de erros, retomada e operações repetidas. Permite acompanhar a conversa, os nós percorridos, as consultas RAG e web, as ferramentas MCP e as falhas relevantes.
+**Code:** integra o Langfuse, que ainda não está instalado nem instrumentado no código, para acompanhar execução do grafo, chamadas de modelo, pesquisas web, ferramentas MCP, imagem e falhas relevantes. Documenta a execução completa e adiciona verificações finais de erros, retomada e operações repetidas. Avalia a fidelidade das afirmações do aviso aos trechos recuperados e a relevância da resposta, com exemplos de casos sem fonte e de conteúdo fictício, sem confundir rastreamento com prova de correção.
 
-**Reviewer:** confere que observabilidade não substitui checkpoint, que dados pessoais não são enviados sem decisão explícita e que os testes essenciais continuam reproduzíveis. Verifica os cenários integrados de Impasse, reinício, conflito de versão e preservação dos recursos autorizados.
+**Reviewer:** confere que observabilidade não substitui checkpoint, que dados pessoais não são enviados sem decisão explícita e que testes usam substitutos sem depender de serviços externos. Verifica cenários integrados de Impasse, conflito de versão e preservação dos recursos autorizados. Reinício perde o estado em memória no MVP; persistência durável fica para outra fase.
 
 **Concluir quando:** uma execução pode ser rastreada sem expor dados desnecessários e os critérios de conclusão do projeto foram verificados.
 
@@ -336,13 +366,13 @@ A resposta reúne receita, aviso informativo de saúde, imagem quando disponíve
 * O usuário pode salvar informações enquanto o fluxo está pausado sem chamar o LLM.
 * A retomada explícita preserva o contexto e `total_attempts`, reinicia apenas `revision_count` e volta ao Chef e ao SubChef.
 * A decisão de encerrar é registrada e respeitada.
-* O armazenamento persistente permite recuperar a mesma conversa após reiniciar a aplicação.
+* O histórico de uma sessão mantém receitas concluídas enquanto o processo está ativo. Reiniciar a aplicação perde esse histórico no MVP.
 * Atualizações com `expected_state_version` desatualizada são rejeitadas sem sobrescrita. A proteção continua válida para atualizações concorrentes.
 * A receita final respeita os recursos autorizados. Mudanças de recurso acontecem no ciclo Chef → SubChef → Impasse, antes do Cozinheiro. Se o Cozinheiro divergir da proposta aprovada, ele tem uma tentativa de correção, e depois a finalização falha (decisão 9).
 * O aviso de saúde permanece separado da receita e não aprova, reprova, bloqueia ou modifica o fluxo.
-* O RAG e a pesquisa web preservam a origem dos resultados; o aviso apresenta as fontes utilizadas e reconhece evidência insuficiente.
-* As cinco ferramentas MCP estão implementadas, integradas e testadas, com o registro de Impasse vinculado à interação humana.
-* O pedido de imagem corresponde à receita final e sua integração evita repetições acidentais dentro das garantias do provedor e do armazenamento.
+* A pesquisa web preserva título e URL dos resultados; o aviso apresenta as fontes utilizadas e reconhece evidência insuficiente. A base RAG não faz parte do MVP.
+* As ferramentas MCP necessárias têm contratos e testes; o registro de Impasse fica vinculado à interação humana e à mesma sessão. O registro opcional de `search_web` no servidor padrão é documentado conforme a decisão da etapa 10.1.
+* O pedido de imagem corresponde à receita final. Um provedor gratuito produz referência de imagem utilizável, quando disponível; falhas preservam a receita. A integração evita repetições acidentais dentro das garantias do provedor e do armazenamento em memória.
 * A interface permite iniciar, acompanhar e continuar a mesma conversa, além de exibir o resultado com imagem quando disponível.
 * O Langfuse permite rastrear a execução sem substituir o estado persistido nem expor dados desnecessários.
 * Testes, instruções e configuração estão documentados e revisados.
@@ -350,15 +380,19 @@ A resposta reúne receita, aviso informativo de saúde, imagem quando disponíve
 
 ## 6. Registro de decisões e pendências
 
-Estado do projeto em 2026-11-21, conforme o código no repositório:
+Estado do projeto em 2026-11-22, conforme o código integrado na `main`:
 
-* Etapa 0: parcial. Falta o README com instruções de instalação e execução.
-* Etapas 1 a 6: implementadas. A etapa 6 é em memória; a persistência durável é pendente.
+* Etapa 0: parcial. O README principal é apenas uma apresentação e aponta para `docs/README.pt-br.md`, que não existe. A atualização fica na preparação 11.0, por João com revisão de Caio.
+* Etapas 1 a 6: implementadas. A etapa 6 é em memória; persistência durável ficou fora do MVP.
 * Etapa 7: integrada na `main` (PR #14).
-* Etapa 8: integrada na `main` (PR #13), ligada ao grafo (`cook → health → finalize`).
-* Etapa 9: em andamento, por João.
-* Etapa 10: iniciada na branch `feat/mcp-tools`, pela parte que não depende da etapa 9. Contrato em rascunho em `docs/CONTRATO_MCP.md`.
-* Etapas 11 e 12: pendentes.
+* Etapa 8: integrada na `main` (PR #13), ligada ao fluxo que agora segue `cook → health → image → finalize`.
+* Etapa 9: integrada na `main` (PR #16), com Tavily no nó de saúde e testes simulados.
+* Etapa 10: infraestrutura MCP, nó de imagem e provedor simulado integrados na `main` (PR #15). Não há geração de imagem real. `search_web` existe como registro opcional no servidor, não no servidor padrão.
+* Etapa 10.1: pendente, para integrar provedor real gratuito e fechar a entrega da imagem.
+* Etapa 11.0: pendente, README e textos fixos da interface, por João com revisão de Caio.
+* Etapa 11: pendente, interface web definida em `docs/design/design.md`, sem Streamlit.
+* Etapa 12: pendente. Não há dependência nem instrumentação Langfuse no código.
+* Persistência durável em banco de dados: fora do MVP atual; sessão, checkpoints e índice de imagem permanecem em memória.
 
 | # | Decisão | Situação | Etapas |
 | --- | --- | --- | --- |
@@ -371,15 +405,16 @@ Estado do projeto em 2026-11-21, conforme o código no repositório:
 | 7 | `health_status` com `pending`, `ok`, `insufficient` e `unavailable`. `ok` exige fonte válida; `insufficient` é aviso sem fundamento nas fontes; `unavailable` é falha técnica. | Decidida (revisada no PR #13) | 8 |
 | 8 | Contraindicações vêm só do que as fontes sustentam; lista vazia quando nenhuma é sustentada. | Decidida (revisada no PR #13) | 8 |
 | 9 | Recurso divergente no Cozinheiro: uma tentativa de correção e, se persistir, falha da finalização (opção A). | Decidida (PR #14) | 7 |
-| 10 | A base RAG fica fora da etapa 9. A busca web via Tavily é a única fonte por ora. | Decidida | 9 |
+| 10 | A base RAG fica fora do MVP. A busca web via Tavily é a fonte conectada ao nó de saúde. | Decidida | 9 |
 | 11 | Nomes reais de Pessoa A e Pessoa B. | **Pendente** | Todas |
-| 12 | Provedor de geração de imagem e contrato de idempotência. | **Pendente** | 10 |
-| 13 | Persistência em SQLite, em dois arquivos: aplicação (checkpoints e idempotência do Impasse) e `mcp` (índice de imagens), cada um em volume próprio. Etapa própria, depois das etapas 9 e 10 em memória. PostgreSQL fica fora do escopo. | Decidida | 6 (migração), 10 |
+| 12 | Contrato de idempotência em memória entregue. Testar inicialmente Recraft V4.1 Flash V2 gratuito via OpenRouter, com substituição configurável; a variante gratuita está anunciada para retirada em 28/11/2026. Não usar automaticamente modelo pago. | Provedor real pendente | 10.1 |
+| 13 | No MVP, sessão, checkpoints e índice de imagens ficam em memória e são perdidos no reinício. A proposta anterior de dois arquivos SQLite pode ser reavaliada em etapa futura, fora do escopo atual. | Escopo do MVP decidido; tecnologia futura em aberto | Futura |
 | 14 | Política de privacidade e retenção de traces no Langfuse. | **Pendente** | 12 |
 | 15 | Servidor MCP com FastMCP (sobre o SDK oficial `mcp`) e transporte streamable HTTP entre os serviços `app` e `mcp` do Docker Compose. Substitui a decisão anterior de usar `stdio`. | Decidida (revisada) | 10 |
 | 16 | Idempotência da imagem em memória no MVP, com garantias e limites documentados. | Decidida | 10 |
-| 17 | `record_impasse_decision` fica no processo da aplicação, onde está o estado; o container `mcp` expõe só ferramentas sem estado compartilhado. | **Pendente (proposta no contrato)** | 10 |
+| 17 | `record_impasse_decision` fica no processo da aplicação, com a mesma `RecipeSession` usada para registrar o histórico; o container `mcp` expõe ferramentas sem estado compartilhado. | Decidida e implementada | 10 |
 | 18 | Nó `image` entre a saúde e a finalização (`cook → health → image → finalize`); falha de imagem não bloqueia a receita; sem nó `format_output` separado. | Decidida | 10, 11 |
-| 19 | O SubChef e o Cozinheiro passam a chamar a validação de recursos pelo cliente MCP, ou continuam chamando a função diretamente. | **Pendente** | 10 |
-| 20 | O cliente guarda só o `thread_id` no navegador, para reabrir a mesma conversa; a fonte da verdade do estado fica no servidor. | **Pendente (proposta)** | 11 |
-| 21 | Cota do Tavily (cerca de 1.000 buscas por mês, a confirmar no site): três consultas por receita, sem retentativa automática; cota esgotada resulta em `unavailable`. Limites iniciais: 3 resultados por consulta, 500 caracteres por trecho, 10 segundos de tempo limite. | Decidida | 9 |
+| 19 | SubChef e Cozinheiro continuam usando a validação determinística diretamente; o servidor MCP também expõe a ferramenta. Mudar as chamadas do grafo só se houver necessidade concreta. | Implementação atual mantida | 10 |
+| 20 | A interface deve conservar a mesma sessão no servidor e o `thread_id` durante navegação e atualização da página. Definir o mecanismo de identificação da sessão antes da implementação, sem prometer recuperação após reiniciar o processo. | Pendente | 11 |
+| 21 | Cota gratuita do Tavily a confirmar no painel. O adaptador faz até três consultas por receita, sem retentativa própria; cota esgotada resulta em `unavailable`. Limites implementados: 3 resultados por consulta, 500 caracteres por trecho e 20 segundos por consulta. | Implementada, cota a confirmar | 9 |
+| 22 | Interface web com CSS substitui Streamlit. Preservar composição TÒPAS e identidade Coxinh.IA, com acabamento visual limpo, quatro recortes flutuantes e revisão pela UI UX Pro Max. | Decidida, implementação pendente | 11 |
