@@ -1,0 +1,24 @@
+# Serviços do Coxinh.IA. Contrato em docs/CONTRATO_MCP.md.
+#
+# `mcp` expõe as ferramentas sem estado compartilhado por streamable HTTP.
+# O serviço `app` (interface Streamlit) entra na etapa 11 e chamará o `mcp` em
+# http://mcp:8000/mcp, definido em MCP_SERVER_URL.
+services:
+  mcp:
+    build: .
+    command: ["python", "-m", "mcp_server.server"]
+    environment:
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; socket.create_connection(('127.0.0.1', 8000), 2).close()"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
