@@ -9,6 +9,7 @@ from src.graph.impasse import impasse_node, route_after_impasse
 from src.graph.nodes.chef import chef_node
 from src.graph.nodes.cook import cook_node
 from src.graph.nodes.health import health_node
+from src.graph.nodes.image import image_node
 from src.graph.nodes.record_review import record_review_node
 from src.graph.nodes.subchef import subchef_node
 from src.graph.routing import route_after_subchef
@@ -27,13 +28,15 @@ def build_graph(
     builder.add_node("record_review", record_review_node)
     builder.add_node("cook", cook_node)
     builder.add_node("health", health_node)
+    builder.add_node("image", image_node)
     builder.add_node("finalize", finalize_node)
 
     builder.add_edge(START, "chef")
     builder.add_edge("chef", "subchef")
     builder.add_edge("subchef", "record_review")
     builder.add_edge("cook", "health")
-    builder.add_edge("health", "finalize")
+    builder.add_edge("health", "image")
+    builder.add_edge("image", "finalize")
     builder.add_edge("finalize", END)
 
     if checkpointer is not None:
