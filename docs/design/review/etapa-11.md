@@ -94,4 +94,6 @@ As referências foram lidas como métodos de revisão; não foram instaladas com
 3. Integrar e validar a etapa 10.1 com imagem real da receita. O frontend já trata o contrato e as falhas, mas a geração real não foi testada nem implementada nesta etapa.
 4. Revisão de Caio e aceite antes do merge. O PR deve permanecer rascunho enquanto os recortes não forem aprovados.
 
+Publicação pendente: o commit local foi criado, mas a revisão automática de aprovação bloqueou o `git push` por exigir autorização explícita para publicar no repositório público `Caio-GBrayner/Coxinh.IA`. Nenhuma branch foi enviada e nenhum PR foi aberto. `retomada-mcp.patch` permanece fora do commit.
+
 Limite adicional do contrato preservado: se o POST de criação for aceito e a resposta com ID se perder, a interface só pode consultar o histórico concluído; não recupera um Impasse cujo ID nunca recebeu. Não há reenvio automático. A recuperação integral desse caso exige uma evolução futura da API, não uma alteração silenciosa nesta etapa. Langfuse permanece fora do escopo.

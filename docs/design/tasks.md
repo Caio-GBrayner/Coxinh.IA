@@ -77,5 +77,4 @@ As tarefas 0 e 1 precedem as telas. A criação depende da API já preparada; Im
 
 ## Evidências da implementação
 
-Ver [relatório da etapa 11](review/etapa-11.md), capturas, comandos e pendências. O aceite permanece parcial: recortes com alfa preparados, mas acabamento/fidelidade ainda precisam de revisão. Uso das referências autorizado por João em 22/11/2026. Fotos da dupla e do personagem de saúde pendentes; etapa 10.1 não implementada aqui.
-
+Ver [relatório da etapa 11](review/etapa-11.md), capturas, comandos e pendências. O aceite permanece parcial: recortes com alfa preparados, mas acabamento/fidelidade ainda precisam de revisão. Uso das referências autorizado por João em 22/11/2026. Fotos da dupla e do personagem de saúde pendentes; etapa 10.1 não implementada aqui. Publicação e PR aguardam autorização explícita após bloqueio da revisão automática.
