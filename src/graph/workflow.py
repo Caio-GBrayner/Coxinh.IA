@@ -8,7 +8,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
 from src.graph.builder import build_graph
-from src.graph.impasse import ImpasseDecision, StateVersionConflict
+from src.graph.impasse import (
+    IdempotencyKeyReuse,
+    ImpasseDecision,
+    StateVersionConflict,
+    WorkflowNotPaused,
+)
 from src.state import RecipeState
 
 
@@ -63,7 +68,7 @@ class InMemoryWorkflow:
             if processed is not None:
                 previous_fingerprint, previous_result = processed
                 if previous_fingerprint != fingerprint:
-                    raise ValueError(
+                    raise IdempotencyKeyReuse(
                         "An idempotency key cannot be reused for a different decision."
                     )
                 return deepcopy(previous_result)
@@ -80,13 +85,13 @@ class InMemoryWorkflow:
                 == decision.idempotency_key
             ):
                 if current_state.get("last_impasse_decision_fingerprint") != fingerprint:
-                    raise ValueError(
+                    raise IdempotencyKeyReuse(
                         "An idempotency key cannot be reused for a different decision."
                     )
                 graph_input = None
             else:
                 if current_state.get("status") != "awaiting_user":
-                    raise ValueError(
+                    raise WorkflowNotPaused(
                         "The workflow is not waiting for an Impasse decision."
                     )
 
