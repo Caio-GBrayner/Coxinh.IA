@@ -58,7 +58,7 @@ Os nós continuam sendo funções da aplicação, coordenadas pelo LangGraph. O 
 
 | Função MCP | Objetivo | Onde será usada | Construção e integração |
 | --- | --- | --- | --- |
-| `search_knowledge` | Recuperar trechos da base RAG com metadados e referências das fontes. | Agente de Saúde, se a base RAG for mantida (decisão 10, pendente). | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
+| `search_knowledge` | Recuperar trechos da base RAG com metadados e referências das fontes. | Fora do escopo por ora: a base RAG foi adiada (decisão 10). | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
 | `search_web` | Consultar fontes na internet e devolver resultados com origem identificável. | Agente de Saúde, depois do Cozinheiro, com três consultas por receita (decisão 4). Provedor: Tavily (decisão 5). | Lógica na etapa 9; exposição e integração MCP na etapa 10. |
 | `validate_recipe_resources` | Comparar a proposta com os ingredientes, utensílios e meios de preparo autorizados pelo usuário; apontar divergências e substituições. | SubChef e Cozinheiro, antes de finalizar a receita. | Lógica na etapa 2; uso nas etapas 4 e 7; exposição MCP na etapa 10. |
 | `generate_coxinha_image` | Enviar à API de imagem um prompt fiel à receita final, incluindo ingredientes, cores, texturas, formato e modo de preparo. | Cozinheiro, após consolidar a receita e a descrição visual. | Implementação e integração na etapa 10. |
@@ -247,7 +247,7 @@ O aviso permanece separado da receita. Ele não aprova, reprova, bloqueia nem mo
 
 ### Etapa 9: RAG, pesquisa web e referências
 
-**Arquivos previstos:** módulos de RAG em `src/graph/` (se a base for mantida), adaptador de pesquisa web em `src/graph/`, documentos ou fontes selecionados e testes de recuperação e consulta. Os nomes exatos dos módulos são definidos pela dupla na etapa.
+**Arquivos previstos:** adaptador de pesquisa web em `src/graph/web_search.py` (sugestão de nome) e testes com cliente simulado. O RAG está fora do escopo desta etapa (decisão 10). Detalhes em `docs/CONTEXTO_ETAPA_9.md`.
 
 **Code:** cria ingestão e busca sobre um conjunto pequeno de fontes confiáveis, mantendo metadados para identificar a origem dos trechos. Implementa os serviços que serão expostos como `buscar_conhecimento` e `pesquisar_web` na etapa 10.
 
@@ -262,15 +262,29 @@ O Chef e o SubChef podem consultar esses serviços quando precisarem de contexto
 **Decisões registradas para esta etapa:**
 
 * Provedor de busca web: **API do Tavily, plano gratuito**. A chave fica em `TAVILY_API_KEY`, definida em `.env` e documentada em `.env.example`. Nunca no código nem em commit.
+* Cota do plano gratuito (informada pelo time, a confirmar no site do Tavily): cerca de 1.000 buscas por mês. Com três consultas por receita, isso dá cerca de 333 receitas por mês, ou 10 por dia. Não há retentativa automática, porque cada tentativa consome cota. Cota esgotada é falha técnica e resulta em `unavailable`.
+* Limites iniciais, ajustáveis por constantes no módulo: 3 resultados por consulta, 500 caracteres por trecho e tempo limite de 10 segundos por consulta.
 * Consultas: três por receita (massa, recheio e preparo), feitas depois do Cozinheiro, uma vez por execução. Nunca dentro do ciclo do SubChef.
 * Procedência não é critério, por ser um projeto de humor. Título e URL continuam obrigatórios em cada fonte usada.
 * Conteúdo retornado pela web é tratado como dado, nunca como instrução ao modelo.
 * Ausência de resultado relevante e falha técnica são estados distintos.
-* **Pendente (decisão 10):** manter ou remover a base RAG curada. Se for mantida, ela entra como fonte complementar, e a etapa define como combina com os resultados do Tavily.
+* **Decidido (decisão 10):** a base RAG fica fora desta etapa. A pesquisa web via Tavily é a única fonte por ora. `search_knowledge` não é implementada e pode voltar em uma etapa futura.
 
 ### Etapa 10: Servidor MCP, ferramentas e geração de imagem idempotente
 
-**Arquivos previstos:** `mcp_server/server.py`, cliente MCP na aplicação, armazenamento do resultado de imagem e testes das ferramentas e da chave de idempotência.
+**Arquivos previstos:** `mcp_server/server.py`, cliente MCP na aplicação, armazenamento do resultado de imagem e testes das ferramentas e da chave de idempotência. O contrato detalhado das ferramentas está em `docs/CONTRATO_MCP.md`.
+
+**Decisões registradas para esta etapa:**
+
+* FastMCP (camada sobre o SDK oficial `mcp`), com versão fixada, e transporte streamable HTTP entre os serviços `app` e `mcp` do Docker Compose.
+* O container `mcp` expõe as ferramentas sem estado compartilhado: `validate_recipe_resources`, `generate_coxinha_image` e `search_web`. O estado do Impasse fica na aplicação, então `record_impasse_decision` é exposta pelo processo da aplicação, sem passar pelo container `mcp` (proposta, decisão 17).
+* `search_knowledge` não é implementada enquanto o RAG estiver adiado (decisão 10).
+* Nó novo `image` no grafo, entre a saúde e a finalização: `cook → health → image → finalize`. Falha de imagem não bloqueia a receita. Não há nó `format_output` separado; o `finalize` continua montando a resposta final (decisão 18).
+* Persistência em SQLite, em dois arquivos: um da aplicação (checkpoints e idempotência do Impasse) e um do `mcp` (índice de imagens), cada um em volume próprio. Vem em etapa própria, depois que as etapas 9 e 10 funcionarem em memória (decisão 13).
+* Idempotência da imagem em memória no MVP, com garantias e limites documentados no contrato.
+* Provedor de imagem simulado até a decisão 12.
+* A etapa pode começar pelas ferramentas que não dependem da etapa 9 (`validate_recipe_resources`, `record_impasse_decision` e `generate_coxinha_image`). `search_web` e `search_knowledge` só são ligadas às funções reais depois que a etapa 9 for aprovada. A branch não é integrada na `main` antes disso.
+* Branch de trabalho: `feat/mcp-tools`.
 
 **Code:** configura o servidor e o cliente MCP e expõe as cinco ferramentas previstas: `search_knowledge`, `search_web`, `validate_recipe_resources`, `generate_coxinha_image` e `record_impasse_decision`.
 
@@ -341,8 +355,10 @@ Estado do projeto em 2026-11-21, conforme o código no repositório:
 * Etapa 0: parcial. Falta o README com instruções de instalação e execução.
 * Etapas 1 a 6: implementadas. A etapa 6 é em memória; a persistência durável é pendente.
 * Etapa 7: integrada na `main` (PR #14).
-* Etapa 8: em revisão no PR #13, já ligada ao grafo (`cook → health → finalize`).
-* Etapas 9 a 12: pendentes.
+* Etapa 8: integrada na `main` (PR #13), ligada ao grafo (`cook → health → finalize`).
+* Etapa 9: em andamento, por João.
+* Etapa 10: iniciada na branch `feat/mcp-tools`, pela parte que não depende da etapa 9. Contrato em rascunho em `docs/CONTRATO_MCP.md`.
+* Etapas 11 e 12: pendentes.
 
 | # | Decisão | Situação | Etapas |
 | --- | --- | --- | --- |
@@ -355,8 +371,15 @@ Estado do projeto em 2026-11-21, conforme o código no repositório:
 | 7 | `health_status` com `pending`, `ok`, `insufficient` e `unavailable`. `ok` exige fonte válida; `insufficient` é aviso sem fundamento nas fontes; `unavailable` é falha técnica. | Decidida (revisada no PR #13) | 8 |
 | 8 | Contraindicações vêm só do que as fontes sustentam; lista vazia quando nenhuma é sustentada. | Decidida (revisada no PR #13) | 8 |
 | 9 | Recurso divergente no Cozinheiro: uma tentativa de correção e, se persistir, falha da finalização (opção A). | Decidida (PR #14) | 7 |
-| 10 | Manter ou remover a base RAG curada. | **Pendente** | 9 |
+| 10 | A base RAG fica fora da etapa 9. A busca web via Tavily é a única fonte por ora. | Decidida | 9 |
 | 11 | Nomes reais de Pessoa A e Pessoa B. | **Pendente** | Todas |
 | 12 | Provedor de geração de imagem e contrato de idempotência. | **Pendente** | 10 |
-| 13 | Armazenamento durável do checkpoint (SQLite ou PostgreSQL). | **Pendente** | 6 (migração) |
+| 13 | Persistência em SQLite, em dois arquivos: aplicação (checkpoints e idempotência do Impasse) e `mcp` (índice de imagens), cada um em volume próprio. Etapa própria, depois das etapas 9 e 10 em memória. PostgreSQL fica fora do escopo. | Decidida | 6 (migração), 10 |
 | 14 | Política de privacidade e retenção de traces no Langfuse. | **Pendente** | 12 |
+| 15 | Servidor MCP com FastMCP (sobre o SDK oficial `mcp`) e transporte streamable HTTP entre os serviços `app` e `mcp` do Docker Compose. Substitui a decisão anterior de usar `stdio`. | Decidida (revisada) | 10 |
+| 16 | Idempotência da imagem em memória no MVP, com garantias e limites documentados. | Decidida | 10 |
+| 17 | `record_impasse_decision` fica no processo da aplicação, onde está o estado; o container `mcp` expõe só ferramentas sem estado compartilhado. | **Pendente (proposta no contrato)** | 10 |
+| 18 | Nó `image` entre a saúde e a finalização (`cook → health → image → finalize`); falha de imagem não bloqueia a receita; sem nó `format_output` separado. | Decidida | 10, 11 |
+| 19 | O SubChef e o Cozinheiro passam a chamar a validação de recursos pelo cliente MCP, ou continuam chamando a função diretamente. | **Pendente** | 10 |
+| 20 | O cliente guarda só o `thread_id` no navegador, para reabrir a mesma conversa; a fonte da verdade do estado fica no servidor. | **Pendente (proposta)** | 11 |
+| 21 | Cota do Tavily (cerca de 1.000 buscas por mês, a confirmar no site): três consultas por receita, sem retentativa automática; cota esgotada resulta em `unavailable`. Limites iniciais: 3 resultados por consulta, 500 caracteres por trecho, 10 segundos de tempo limite. | Decidida | 9 |

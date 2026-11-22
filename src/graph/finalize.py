@@ -33,6 +33,10 @@ def finalize_node(state: RecipeState) -> dict[str, object]:
             "uncertainty": state.get("health_uncertainty"),
             "health_status": state.get("health_status") or "pending",
         },
+        "image": {
+            "status": state.get("image_status") or "pending",
+            "url": state.get("image_url"),
+        },
         "resource_validation": state.get(
             "cook_resource_validation", "incomplete"
         ),

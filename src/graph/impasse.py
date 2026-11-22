@@ -43,12 +43,20 @@ class StateVersionConflict(ValueError):
         self.actual = actual
 
 
+class IdempotencyKeyReuse(ValueError):
+    """A mesma chave de idempotência foi usada com uma decisão diferente."""
+
+
+class WorkflowNotPaused(ValueError):
+    """A conversa não está aguardando uma decisão do Impasse."""
+
+
 def record_impasse_decision(
     state: RecipeState,
     decision: ImpasseDecision,
 ) -> dict[str, object]:
     if state.get("status") != "awaiting_user":
-        raise ValueError("An Impasse decision requires a paused workflow.")
+        raise WorkflowNotPaused("An Impasse decision requires a paused workflow.")
 
     current_version = state.get("state_version")
     if (

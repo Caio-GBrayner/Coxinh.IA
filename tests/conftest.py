@@ -5,7 +5,16 @@ from unittest.mock import Mock
 import pytest
 from langchain_core.runnables import RunnableLambda
 
+from src import mcp_client
 from src.graph.nodes import cook, health
+
+
+@pytest.fixture(autouse=True)
+def isolate_tool_client():
+    """Dá a cada teste um servidor MCP novo, para o índice de imagens não vazar."""
+    mcp_client.reset_default_client()
+    yield
+    mcp_client.reset_default_client()
 
 
 @pytest.fixture(autouse=True)

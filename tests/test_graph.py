@@ -5,6 +5,8 @@ import pytest
 
 from src.graph import builder as graph_module
 from src.graph.nodes import health
+from src.graph.nodes import image as image_module
+from src.mcp_client import McpToolError
 from src.schemas import Recipe, SubChefEvaluation
 from src.state import RecipeState, create_initial_state
 
@@ -241,3 +243,50 @@ def test_health_runs_after_cook_and_before_finalize(monkeypatch):
     assert seen == {"cook_output": True, "final_response": False}
     assert result["status"] == "completed"
     assert result["final_response"]["health"]["health_status"] == "insufficient"
+
+
+def test_image_appears_in_final_response(monkeypatch):
+    """Verifica que a imagem gerada chega em final_response["image"]."""
+    workflow, _ = build_test_graph(monkeypatch, ["approved"])
+
+    result = workflow.invoke(create_initial_state("Make a coxinha.", "thread-1"))
+
+    image_response = result["final_response"]["image"]
+    assert result["status"] == "completed"
+    assert image_response["status"] == "generated"
+    assert image_response["url"].startswith("simulated://")
+
+
+def test_recipe_completes_when_image_generation_fails(monkeypatch):
+    """Verifica que uma falha de imagem não impede a conclusão da receita."""
+
+    class FailingClient:
+        def call(self, name, arguments):
+            raise McpToolError("provider_unavailable", "down")
+
+    monkeypatch.setattr(image_module, "get_tool_client", lambda: FailingClient())
+    workflow, _ = build_test_graph(monkeypatch, ["approved"])
+
+    result = workflow.invoke(create_initial_state("Make a coxinha.", "thread-1"))
+
+    assert result["status"] == "completed"
+    assert result["final_response"]["image"] == {"status": "failed", "url": None}
+    assert result["final_response"]["recipe"]["title"] == "Crocância de Frango"
+
+
+def test_image_runs_after_health_and_before_finalize(monkeypatch):
+    """Verifica a ordem Cozinheiro → Saúde → Imagem → Finalização."""
+    seen = {}
+
+    def tracking_image_node(state: RecipeState) -> dict[str, object]:
+        """Registra o que já existe no estado quando o nó de imagem roda."""
+        seen["health_status"] = state.get("health_status")
+        seen["final_response"] = "final_response" in state
+        return image_module.image_node(state)
+
+    monkeypatch.setattr(graph_module, "image_node", tracking_image_node)
+    workflow, _ = build_test_graph(monkeypatch, ["approved"])
+
+    workflow.invoke(create_initial_state("Make a coxinha.", "thread-1"))
+
+    assert seen == {"health_status": "insufficient", "final_response": False}
