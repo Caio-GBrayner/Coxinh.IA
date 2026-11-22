@@ -56,7 +56,7 @@ As referências foram lidas como métodos de revisão; não foram instaladas com
 
 - [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill): hierarquia de títulos condensados, texto legível, alvos de toque, foco visível, quebra de textos longos e quatro larguras de revisão.
 - [Impeccable](https://github.com/pbakaus/impeccable): crítica por seção e revisão de espaçamento, contraste, estados de erro e excesso de decoração. O achado de sobreposição no celular foi corrigido.
-- [Emil Kowalski](https://github.com/emilkowalski/skills/blob/main/skills/animate/SKILL.md): CSS para sequência predeterminada, transformação/opacidade, resposta curta dos controles e movimento reduzido. A abertura fica estática; o carrossel avança por ação, sem animação que atrase teclado ou altere foco.
+- [Emil Kowalski](https://github.com/emilkowalski/skills/blob/main/skills/animate/SKILL.md): CSS para sequência predeterminada, transformação/opacidade, resposta curta dos controles e movimento reduzido. A abertura tem flutuação com controle de pausa; o carrossel avança por ação, sem animação que atrase teclado ou altere foco.
 - [Taste Skill](https://github.com/Leonxlnx/taste-skill): composição própria com um foco por área, ativos do projeto e inspeção no navegador. A paleta preta, branca e verde, o carrossel e os textos do contrato prevalecem sobre sugestões genéricas.
 
 ## Arquivos e decisões de implementação
@@ -89,8 +89,27 @@ As referências foram lidas como métodos de revisão; não foram instaladas com
 
 ## Pendências para aceite
 
+### Ajustes da prévia em 22/11/2026
+
+Os quatro ajustes solicitados foram implementados e conferidos no Edge em 1440, 1024, 768 e 390 pixels. Nesta revisão, **24 testes de navegador, build e lint passaram**. O resultado de 196 testes Python acima corresponde à primeira entrega; o backend não mudou nesta revisão.
+
+| Arquivo | Bloco e alteração |
+| --- | --- |
+| `frontend/src/App.tsx` | `App`: logo original no cabeçalho e rodapé, controle de pausa da flutuação e componente da turma. |
+| `frontend/src/App.css` | `.brand`, `.float`, `float-object`, `.story`, `.duo`, `.class-reveal`: enquadramento do logo, flutuação contínua, tipografia e transição horizontal vinculada à rolagem. |
+| `frontend/src/index.css` | Fontes locais Archivo e Source Sans 3 e tokens da História. |
+| `frontend/src/content.ts` | Textos dos controles de pausa e retomada do movimento. |
+| `frontend/src/ClassPhotoReveal.tsx` | `ClassPhotoReveal`: revela a fotografia sobre a ilustração ao descer, reverte ao subir e mostra ambas sem transição quando há preferência por movimento reduzido. |
+| `frontend/public/assets/coxinh-logo-nome.png` | Cópia idêntica do arquivo original solicitado, sem redesenho. |
+| `frontend/public/fonts/` | Fontes da referência TÒPAS com licenças OFL e fontes de obtenção registradas. |
+| `frontend/tests/design-followup.spec.ts` | Verifica logo, fontes, progresso da transição, reversão, flutuação, pausa e movimento reduzido. |
+
+Capturas adicionais em cada pasta de largura: `marca-header.png`, `marca-rodape.png`, `historia-tipografia.png`, `dupla-tipografia.png` e `turma-{0,25,50,100}.png`. Exemplos: [História desktop](1440/historia-tipografia.png), [transição pela metade](1440/turma-50.png), [História no celular](390/historia-tipografia.png).
+
+### Dependências restantes
+
 1. Finalizar e aprovar bordas dos quatro recortes e conferir fidelidade das marcas. Há alfa real e autorização de uso confirmada por João, mas o recorte generativo não certifica reprodução exata do original. O hero decorativo também pede aprovação visual final.
-2. Selecionar a foto da dupla e a foto cenográfica do personagem fictício de saúde. Nenhuma delas foi inventada; o conteúdo está completo sem as fotos.
+2. Selecionar a foto da dupla. A foto cenográfica do personagem de saúde foi fornecida pelo usuário em `docs/design/medico.png` e integrada abaixo do título em `RecipeResult.tsx`, com dimensionamento responsivo em `.health-photo` (`App.css`). Build e lint passaram; carregamento e ausência de overflow foram conferidos no navegador em 1440 e 390 pixels. Capturas: `1440/aconselhamento-medico.png` e `390/aconselhamento-medico.png`.
 3. Integrar e validar a etapa 10.1 com imagem real da receita. O frontend já trata o contrato e as falhas, mas a geração real não foi testada nem implementada nesta etapa.
 4. Revisão de Caio e aceite antes do merge. O PR deve permanecer rascunho enquanto os recortes não forem aprovados.
 

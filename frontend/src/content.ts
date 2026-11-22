@@ -1,5 +1,7 @@
 /** Textos editoriais: docs/design/conteudo_interface.md. Dados de receitas vêm da API. */
 export const copy = {
+    pauseMotion: "Pausar movimento",
+    resumeMotion: "Ativar movimento",
     brand: "Coxinh.IA",
     home: "Home",
     gallery: "Suas receitas",

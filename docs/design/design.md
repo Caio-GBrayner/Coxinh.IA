@@ -11,7 +11,9 @@ O frontend será web, com estilos em CSS. Streamlit não faz parte desta interfa
 
 ## 2. Direção visual e marca
 
-A referência principal é o TÒPAS. A abertura do Coxinh.IA usa a mesma ideia de profundidade entre letreiro, prato e objetos suspensos, com composição, marca e imagens estáticas próprias. A história usa a passagem de ilustração para fotografia como recurso editorial. [TÒPAS](https://bar-topas.ch/) · [Awwwards](https://www.awwwards.com/sites/topas#creator)
+A referência principal é o TÒPAS. A abertura do Coxinh.IA usa a mesma ideia de profundidade entre letreiro, prato e objetos suspensos, com composição, marca e imagens próprias. Os objetos flutuam suavemente, com controle de pausa e respeito à preferência por movimento reduzido. A história usa a passagem de ilustração para fotografia como recurso editorial. [TÒPAS](https://bar-topas.ch/) · [Awwwards](https://www.awwwards.com/sites/topas#creator)
+
+Ajuste solicitado em 22/11/2026: usar o arquivo original `Coxinh.IA  logo nome.png` no cabeçalho e no rodapé; Archivo expandida (125%, peso 800) nos títulos da História e da dupla, com Source Sans 3 nos parágrafos. A turma ocupa uma única moldura: ao rolar para baixo, a fotografia revela-se da esquerda para a direita sobre a ilustração; ao subir, o movimento reverte. Com movimento reduzido, ambas aparecem sem transição. A identidade preta, branca e verde permanece.
 
 A grafia da marca é **Coxinh.IA**. Preservar a coxinha vazada branca e o ponto verde dos ativos existentes. Usar símbolo e nome no cabeçalho e o letreiro em grande escala na abertura. Os arquivos `Coxinh.IA marca.png`, `Coxinh.IA  logo nome.png` e `Coxinh.IA fachada.png` são referências de marca. `Coxinh.IA site.png` é referência para a apresentação das imagens da galeria.
 

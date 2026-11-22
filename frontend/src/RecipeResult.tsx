@@ -138,6 +138,12 @@ export function RecipeResult({ response }: { response: FinalResponse | null }) {
                         }
                     </p>
                     <h2>{copy.health}</h2>
+                    <img
+                        className="health-photo"
+                        src="/assets/medico-transparente.png"
+                        alt="Personagem de jaleco olhando através de uma lupa"
+                        loading="lazy"
+                    />
                 </div>
                 <div>
                     <p className="lead">{health?.warning || copy.noHealth}</p>

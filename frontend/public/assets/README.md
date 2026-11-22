@@ -4,6 +4,7 @@ Uso das referências de café, navio e marca Deloitte autorizado por João nesta
 
 | Arquivo | Origem e tratamento | Situação |
 | --- | --- | --- |
+| `coxinh-logo-nome.png` | Cópia exata de `Coxinh.IA  logo nome.png` | Usada no cabeçalho e rodapé; arquivo original preservado, sem redesenho. |
 | `coxinh-symbol.png` | `Coxinh.IA marca.png`, recorte com imagegen | Alfa verificado no navegador; refinamento de bordas e fidelidade exata do contorno ainda exigem revisão. |
 | `coffee-cutout.png` | `cafe.jpg`, recorte com imagegen | Alfa verificado; revisão final de bordas pendente. |
 | `deloitte-cutout.png` | `deloitte.jpg`, remoção do quadriculado com imagegen | Alfa verificado; conferir fidelidade tipográfica antes do aceite. O suporte branco na tela é CSS. |
@@ -12,9 +13,11 @@ Uso das referências de café, navio e marca Deloitte autorizado por João nesta
 | `turma-ilustrada.png` | Cópia de `turma_ilustrada.png` | Imagem fornecida no projeto, sem alteração. |
 | `turma-bootcamp.png` | Cópia de `turma_bootcamp.png` | Imagem fornecida no projeto, sem alteração. |
 
-Não foram inventadas fotos da dupla ou do personagem de saúde. Essas duas fotos permanecem pendentes. Nenhum desses ativos decorativos é usado para representar a imagem final de uma receita.
+`medico.png` é uma cópia sem alterações de `docs/design/medico.png`, foto fornecida e selecionada pelo usuário para aparecer abaixo de “Aconselhamento de consumo”. A foto da dupla permanece pendente. Nenhum desses ativos decorativos é usado para representar a imagem final de uma receita.
 
 ## Prompts utilizados
+
+`medico-transparente.png` é a versão recortada com imagegen da foto fornecida em `docs/design/medico.png`, usada em `RecipeResult.tsx`. Fundo com alfa real, conferido sobre cinza no navegador; o original foi preservado. Instrução: remover apenas o fundo branco, manter o personagem, jaleco opaco, lupa e acessórios, sem acrescentar elementos.
 
 Ferramenta: imagegen integrada, com `transparent_background=true`. Os resultados selecionados foram copiados para esta pasta. Os candidatos de segunda tentativa não substituíram os selecionados porque não trouxeram melhoria clara.
 

@@ -19,6 +19,8 @@
     --content: 1320px;
     --radius: 8px;
     --heading: "Arial Narrow", "Impact", sans-serif;
+    --story-heading: "Archivo", Arial, sans-serif;
+    --story-body: "Source Sans 3", Arial, sans-serif;
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --fast: 150ms;
     font-size: 16px;
@@ -211,4 +213,18 @@ span {
     .section {
         padding: 3rem 1.25rem;
     }
+}
+
+@font-face {
+    font-family: "Archivo";
+    src: url("/fonts/archivo-variable.ttf") format("truetype");
+    font-weight: 100 900;
+    font-stretch: 62% 125%;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Source Sans 3";
+    src: url("/fonts/source-sans-3-variable.ttf") format("truetype");
+    font-weight: 200 900;
+    font-display: swap;
 }

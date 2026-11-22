@@ -5,6 +5,7 @@ import { useRecipeSession } from "./useRecipeSession";
 import { Impasse } from "./Impasse";
 import { Gallery } from "./Gallery";
 import { RecipeResult } from "./RecipeResult";
+import { ClassPhotoReveal } from "./ClassPhotoReveal";
 import "./App.css";
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
     const [idea, setIdea] = useState("");
     const [inputError, setInputError] = useState("");
     const [detail, setDetail] = useState<SavedRecipe | null>(null);
+    const [motionPaused, setMotionPaused] = useState(false);
     const workflow = useRef<HTMLElement>(null);
     const previousStatus = useRef("");
     const status = session.active?.status || "";
@@ -46,13 +48,12 @@ function App() {
             </a>
             <header className="site-header">
                 <a className="brand" href="#home">
-                    <img src="/assets/coxinh-symbol.png" alt="" />
-                    {copy.brand}
+                    <img src="/assets/coxinh-logo-nome.png" alt={copy.brand} />
                 </a>
                 <nav aria-label={copy.navigation}>
                     <a href="#home">{copy.home}</a>
-                    <a href="#recipes">{copy.gallery}</a>
                     <a href="#story">{copy.story}</a>
+                    <a href="#recipes">{copy.gallery}</a>
                 </nav>
                 <a
                     className="button primary header-create"
@@ -63,7 +64,11 @@ function App() {
                 </a>
             </header>
             <main id="main">
-                <section id="home" className="hero section">
+                <section
+                    id="home"
+                    className="hero section"
+                    data-motion-paused={motionPaused}
+                >
                     <form
                         className="idea-card"
                         onSubmit={create}
@@ -136,6 +141,14 @@ function App() {
                             alt=""
                         />
                     </div>
+                    <button
+                        className="motion-toggle"
+                        type="button"
+                        aria-pressed={motionPaused}
+                        onClick={() => setMotionPaused(!motionPaused)}
+                    >
+                        {motionPaused ? copy.resumeMotion : copy.pauseMotion}
+                    </button>
                 </section>
                 {(session.busy ||
                     session.active ||
@@ -258,24 +271,7 @@ function App() {
                             alt=""
                         />
                     </div>
-                    <div className="class-photos">
-                        <figure>
-                            <img
-                                src="/assets/turma-ilustrada.png"
-                                alt={copy.illustration}
-                                loading="lazy"
-                            />
-                            <figcaption>{copy.illustration}</figcaption>
-                        </figure>
-                        <figure>
-                            <img
-                                src="/assets/turma-bootcamp.png"
-                                alt={copy.group}
-                                loading="lazy"
-                            />
-                            <figcaption>{copy.group}</figcaption>
-                        </figure>
-                    </div>
+                    <ClassPhotoReveal />
                     <div className="duo">
                         <p className="duo-names">{copy.duoPending}</p>
                         <div>
@@ -296,10 +292,18 @@ function App() {
             </main>
             <footer>
                 <a className="brand" href="#home">
-                    {copy.brand}
+                    <img src="/assets/coxinh-logo-nome.png" alt={copy.brand} />
                 </a>
                 <p>{copy.footer}</p>
             </footer>
+            <nav className="floating-nav" aria-label="Navegação flutuante">
+                <a href="#home">{copy.home}</a>
+                <a href="#story">{copy.story}</a>
+                <a href="#recipes">{copy.gallery}</a>
+                <a className="primary" href="#idea" onClick={focusIdea}>
+                    {copy.create}
+                </a>
+            </nav>
         </>
     );
 }
