@@ -124,17 +124,22 @@ export function Gallery({
                                     storage.set("coxinh.galleryId", recipe.id);
                                     open(recipe);
                                 }}
-                                aria-label={`${copy.open}: ${recipe.recipe.title}`}
+                                aria-label={`${copy.open}: ${recipe.title || copy.incomplete}`}
                             >
                                 <RecipeImage
-                                    image={recipe.image}
-                                    title={recipe.recipe.title}
+                                    image={{
+                                        url: recipe.image_url,
+                                        status:
+                                            recipe.image_status ||
+                                            "unavailable",
+                                    }}
+                                    title={recipe.title || copy.incomplete}
                                 />
                                 <span className="card-title">
-                                    {recipe.recipe.title}
+                                    {recipe.title || copy.incomplete}
                                 </span>
                                 <span className="card-subtitle">
-                                    {recipe.recipe.subtitle}
+                                    {recipe.subtitle}
                                 </span>
                             </button>
                         ))}

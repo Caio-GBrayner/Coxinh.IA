@@ -8,19 +8,19 @@
 
 O Coxinh.IA transforma ingredientes e ideias improváveis em receitas de coxinha. É um projeto de humor e sátira criado para estudar fluxos com agentes de IA: a receita pode ser absurda, mas o sistema precisa mostrar como chegou ao resultado e apresentar o aconselhamento de consumo com suas fontes e incertezas.
 
-**Estado atual:** fluxo Python, API FastAPI oficial e interface React. A integra??o da interface ao contrato ass?ncrono est? em andamento. Persist?ncia SQLite, imagem via OpenRouter (ou simula??o sem chave) e observabilidade est?o dispon?veis no backend.
+**Estado atual:** API oficial em `src/api/app.py`, interface React com polling e carrossel global, persistência SQLite e imagens via OpenRouter (ou simulação sem chave).
 
 ## Como a receita é criada
 
 1. **Chef:** propõe uma receita estruturada a partir da entrada da pessoa.
 2. **SubChef:** revisa a proposta. Se precisar de mudanças, o Chef tenta novamente, com no máximo duas revisões.
-3. **Impasse:** quando a revisão não consegue avançar, pausa a execução para a pessoa adicionar orientações ou ingredientes, salvar, retomar ou encerrar. A retomada volta ao Chef e ao SubChef.
+3. **Impasse:** quando a revisão não consegue avançar, pausa a execução para a pessoa adicionar orientações ou ingredientes, salvar, retomar, aceitar como está ou encerrar. A retomada volta ao Chef e ao SubChef; aceitar segue ao Cozinheiro com a proposta atual.
 4. **Cozinheiro:** transforma a receita aprovada em título, subtítulo, passos e descrição visual, sem trocar recursos por conta própria.
 5. **Saúde:** pesquisa massa, recheio e preparo na web e produz um aconselhamento informativo, com fontes e incerteza quando cabível. Não altera a receita nem decide se ela pode ser consumida.
-6. **Imagem:** chama a ferramenta MCP de geração. Nesta versão, o provedor é simulado e devolve uma referência `simulated://`. Uma falha de imagem não impede a finalização.
+6. **Imagem:** chama a ferramenta MCP de geração. Sem chave OpenRouter, o provedor simulado devolve uma referência `simulated://`. Uma falha de imagem não impede a finalização.
 7. **Finalização:** reúne receita, aconselhamento e estado da imagem em `final_response`.
 
-O fluxo está montado em [`src/graph/builder.py`](./src/graph/builder.py). [`RecipeSession`](./src/recipe_session.py) coordena cada execução e guarda as receitas concluídas em um histórico em memória. Um novo pedido precisa de um novo `thread_id`; uma decisão de Impasse usa o identificador da execução pausada.
+O fluxo está montado em [`src/graph/builder.py`](./src/graph/builder.py). [`RecipeSession`](./src/recipe_session.py) coordena cada execução e guarda receitas no armazenamento configurado (SQLite na API por padrão). Um novo pedido precisa de um novo `thread_id`; uma decisão de Impasse usa o identificador da execução pausada.
 
 ## Instalar e testar
 
@@ -41,7 +41,7 @@ Os testes usam modelos e pesquisas simulados: não exigem chaves e não devem fa
 
 Copie [`.env.example`](./.env.example) para um arquivo `.env` **na raiz do projeto**. Preencha `LLM_KEY` e `LLM_MODEL` com uma chave e um modelo compatíveis com a integração Groq. Preencha `TAVILY_API_KEY` para a pesquisa do agente de saúde. Não envie o `.env` ao Git.
 
-`MCP_SERVER_URL` pode ficar vazio para usar as ferramentas MCP no mesmo processo. Para conectar a um servidor HTTP separado, informe uma URL como `http://127.0.0.1:8000/mcp` e execute `python -m mcp_server.server` em outro terminal. O servidor padrão oferece validação de recursos e **imagem simulada**; a ferramenta de busca web do MCP só é registrada quando uma função de busca é fornecida explicitamente. O nó de saúde consulta Tavily diretamente.
+`MCP_SERVER_URL` pode ficar vazio para usar as ferramentas MCP no mesmo processo. Para conectar a um servidor HTTP separado, informe uma URL como `http://127.0.0.1:8000/mcp` e execute `python -m mcp_server.server` em outro terminal. O servidor padrão oferece validação de recursos e imagens via OpenRouter ou simuladas sem chave; a ferramenta de busca web do MCP só é registrada quando uma função de busca é fornecida explicitamente. O nó de saúde consulta Tavily diretamente.
 
 Com o ambiente configurado, a API Python da versão atual pode ser experimentada em um terminal interativo:
 
@@ -74,7 +74,7 @@ npm.cmd ci
 npm.cmd run dev -- --host 127.0.0.1
 ```
 
-Abra o endereço impresso pelo Vite, normalmente `http://127.0.0.1:5173`. O proxy `/api` aponta para `127.0.0.1:8080`. Use `npm.cmd` para evitar o bloqueio de `npm.ps1` pela política de execução do PowerShell. Chaves ficam somente no backend. A API web e o MCP HTTP separado não podem ocupar a mesma porta; o MCP no mesmo processo não exige outro servidor.
+Abra o endereço impresso pelo Vite, normalmente `http://127.0.0.1:5173`. O proxy `/api` remove esse prefixo e aponta para `127.0.0.1:8080`. Para outro host, configure `VITE_API_URL` antes do build e `CORS_ORIGINS` no backend. Use `npm.cmd` para evitar o bloqueio de `npm.ps1` pela política de execução do PowerShell. Chaves ficam somente no backend. A API web e o MCP HTTP separado não podem ocupar a mesma porta; o MCP no mesmo processo não exige outro servidor.
 
 Validação, a partir da raiz:
 
@@ -107,20 +107,20 @@ O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a AP
 | --- | --- |
 | `src/schemas.py`, `src/state.py` | Contratos da receita e estado compartilhado do grafo. |
 | `src/graph/nodes/`, `src/graph/builder.py` | Agentes, geração da imagem e rotas do fluxo. |
-| `src/graph/workflow.py`, `src/recipe_session.py` | Checkpoint, retomada do Impasse e histórico da sessão. |
+| `src/graph/workflow.py`, `src/recipe_session.py` | Checkpoint, retomada do Impasse e carrossel global. |
 | `src/utils/web_search.py` | Adaptador de pesquisa Tavily usado pelo agente de saúde. |
 | `mcp_server/` | Ferramentas de validação, imagem simulada e interfaces opcionais de busca e Impasse. |
 | `tests/` | Verificações automatizadas, sem necessidade de chamadas pagas. |
-| `docs/design/design.md` | Especificação visual da futura interface. |
+| `docs/design/design.md` | Especificação visual da interface. |
 | `docs/plano_execucao_coxinh_ia.md` | Etapas, responsabilidades e critérios de conclusão. |
 
 ## Limites da versão atual
 
-O histórico e os checkpoints vivem em memória: são preservados enquanto a mesma instância da aplicação estiver ativa e desaparecem quando o processo termina. Ainda não existe banco de dados nem persistência entre reinícios. A interface guarda apenas o ID ativo e a posição do carrossel na aba, consultando a API ao recarregar. O provedor real de imagens e Langfuse não estão integrados.
+A interface guarda o ID ativo e a posição do carrossel na aba. O carrossel é global e a API usa SQLite por padrão.
 
-Uma falha de rede após `POST /api/recipes` pode deixar uma execução aceita sem o ID ter chegado ao navegador: o contrato atual só entrega o ID ao retornar. A interface consulta o histórico e não repete o POST automaticamente, mas não consegue recuperar uma execução pausada cujo ID nunca recebeu. Isso exige evolução futura do contrato de criação. No Impasse, o ID já conhecido permite consultar o estado após falha ou conflito.
+Uma falha de rede após `POST /recipes` pode deixar uma execução aceita sem o ID ter chegado ao navegador: a resposta 202 pode se perder antes de entregar o ID. A interface consulta o histórico e não repete o POST automaticamente, mas não consegue recuperar uma execução pausada cujo ID nunca recebeu. Isso exige evolução futura do contrato de criação. No Impasse, o ID já conhecido permite consultar o estado após falha ou conflito.
 
-A API roda em um único processo: vários processos sobre o mesmo banco SQLite não são suportados. Uma geração interrompida por queda vira `interrupted` e precisa ser refeita; impasses em aberto sobrevivem. A interface web está em construção. A imagem real depende de `OPENROUTER_API_KEY`; sem ela, o provedor simulado é usado e nenhuma imagem aparece no site.
+A API roda em um único processo: vários processos sobre o mesmo banco SQLite não são suportados. Uma geração interrompida por queda vira `interrupted` e precisa ser refeita; impasses em aberto sobrevivem. A imagem real depende de `OPENROUTER_API_KEY`; sem ela, o provedor simulado é usado e nenhuma imagem aparece no site.
 
 
 O parecer de saúde é informativo. Trechos encontrados na web exigem interpretação cuidadosa e não tornam uma receita segura para consumo. A presença de uma URL indica a origem do trecho utilizado, sem certificar a qualidade da fonte.

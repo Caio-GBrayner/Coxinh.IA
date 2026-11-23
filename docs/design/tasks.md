@@ -7,10 +7,10 @@ Este checklist orienta o Codex no VS Code. Ler primeiro [`requirements.md`](requ
 ## 0. Preparar e conferir a base
 
 - [x] Verificar branch, status do Git e diferenças locais. Preservar alterações existentes. Não incluir `retomada-mcp.patch` no PR.
-- [x] Confirmar `frontend/` com React, TypeScript, Vite e `frontend/vite.config.ts` com proxy `/api` para `127.0.0.1:8000`.
-- [x] Conferir `src/api.py`, `frontend/src/recipeApi.ts`, `frontend/src/recipeTypes.ts`, `tests/test_api.py` e o contrato real do Impasse antes de criar componentes.
+- [x] Confirmar `frontend/` com React, TypeScript, Vite e `frontend/vite.config.ts` com proxy `/api` para `127.0.0.1:8080`.
+- [x] Conferir `src/api/app.py`, `frontend/src/recipeApi.ts`, `frontend/src/recipeTypes.ts`, `tests/test_api.py` e o contrato real do Impasse antes de criar componentes.
 - [x] Rodar `python -m pytest -q` e `npm run build` dentro de `frontend/`; registrar a linha de base e resolver apenas falhas relacionadas à etapa.
-- [x] Abrir `/api/recipes` por Vite e confirmar que a resposta vazia `[]` corresponde à sessão atual. Esse teste de conexão já foi feito por João, mas pode ser repetido após alterações da configuração.
+- [x] Abrir `/api/recipes` por Vite e confirmar que a resposta vazia `{ "items": [] }` corresponde ao carrossel global. Esse teste de conexão já foi feito por João, mas pode ser repetido após alterações da configuração.
 
 ## 1. Fundamentos da interface
 
@@ -42,8 +42,11 @@ Este checklist orienta o Codex no VS Code. Ler primeiro [`requirements.md`](requ
 - [x] Apresentar crítica, proposta, `ingredient_additions`, `user_guidance` e versão atual quando presentes.
 - [x] Permitir inserir ingredientes e orientação; validar a ação `save` para que envie ao menos um ingrediente ou orientação. Não enviar campo vazio como alteração.
 - [x] Usar `submitDecision` com `thread_id`, `expected_state_version` e uma `idempotency_key` própria da decisão. Salvar permanece em `awaiting_user`; retomar e cancelar são ações explícitas.
+- [x] Disponibilizar **Aceitar receita como está** somente quando há proposta; enviar `accept` sem rascunhos não salvos e encaminhar a proposta ao Cozinheiro sem refazer Chef/SubChef.
+- [x] Usar `GET /images/{filename}` oficial; validar nomes e extensões PNG/JPG/JPEG/WebP/SVG e usar fallback em falhas.
+- [x] Resolver `/images/<arquivo>` usando a URL da API no resultado e nos cards; não exibir referências simuladas como imagens reais.
 - [x] Ao receber HTTP 409, consultar novamente o estado, mostrar alteração/conflito, preservar o texto digitado e deixar a pessoa escolher a próxima ação. Não sobrescrever atualização aceita.
-- [x] Ao atualizar a página no meio do Impasse, restaurar a mesma execução se a sessão da API ainda existir. Tratar 404 sem iniciar criação automaticamente.
+- [x] Ao atualizar a página no meio do Impasse, restaurar a mesma execução se a execução persistida ainda existir. Tratar 404 sem iniciar criação automaticamente.
 
 ## 5. Resultado e saúde
 
@@ -78,3 +81,12 @@ As tarefas 0 e 1 precedem as telas. A criação depende da API já preparada; Im
 ## Evidências da implementação
 
 Ver [relatório da etapa 11](review/etapa-11.md), capturas, comandos e pendências. O aceite permanece parcial: recortes com alfa preparados, mas acabamento/fidelidade ainda precisam de revisão. Uso das referências autorizado por João em 22/11/2026. Fotos da dupla e do personagem de saúde pendentes; etapa 10.1 não implementada aqui. Publicação e PR aguardam autorização explícita após bloqueio da revisão automática.
+
+## Integração PR #20 — 23/11/2026
+
+- [x] Concluir apenas o merge em andamento; remover API duplicada e reaplicar stash sem apagá-lo.
+- [x] Usar API oficial, polling de criação/retomada/aceite e tratamento de todos os estados.
+- [x] Preservar aceite sem rascunhos, versão esperada, idempotência e recuperação de 409.
+- [x] Carrossel global aprovado por João; obter detalhes ao abrir card.
+- [x] Atualizar proxy, URL configurável, imagens, contratos e testes.
+- [x] Registrar os resultados finais: 252 testes Python aprovados, 1 ignorado; 35 Playwright aprovados; build e lint aprovados. Ver relatório da etapa 11.

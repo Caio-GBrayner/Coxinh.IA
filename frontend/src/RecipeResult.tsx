@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FinalResponse, ProposedRecipe } from "./recipeTypes";
+import { recipeImageUrl } from "./recipeApi";
 import { copy } from "./content";
 
 function safeUrl(value: string | null | undefined) {
@@ -11,6 +12,7 @@ function safeUrl(value: string | null | undefined) {
         return null;
     }
 }
+
 export function RecipeImage({
     image,
     title,
@@ -19,7 +21,7 @@ export function RecipeImage({
     title: string;
 }) {
     const [failedUrl, setFailedUrl] = useState<string | null>(null);
-    const url = safeUrl(image?.url);
+    const url = recipeImageUrl(image?.url);
     const usable = ["generated", "reused", "completed"].includes(
         image?.status || "",
     );

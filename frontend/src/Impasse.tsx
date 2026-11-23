@@ -63,11 +63,11 @@ export function Impasse({
                             <p>{active.user_guidance}</p>
                         </section>
                     )}
-                    {!!active.ingredient_additions.length && (
+                    {!!active.ingredient_additions?.length && (
                         <section>
                             <h3>{copy.savedAdditions}</h3>
                             <ul>
-                                {active.ingredient_additions.map((x, i) => (
+                                {active.ingredient_additions?.map((x, i) => (
                                     <li key={i}>{x}</li>
                                 ))}
                             </ul>
@@ -112,6 +112,13 @@ export function Impasse({
                             onClick={() => void act("resume")}
                         >
                             {copy.resume}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={busy || blocked || !active.recipe}
+                            onClick={() => void act("accept")}
+                        >
+                            {copy.accept}
                         </button>
                         <button
                             className="text-button"

@@ -320,3 +320,30 @@ def test_accept_cannot_carry_workflow_updates():
             idempotency_key="accept-1",
             user_guidance="Add salt.",
         )
+
+
+def test_accept_uses_current_proposal_without_rerunning_review(monkeypatch):
+    """Aceitar chama o Cozinheiro sem voltar ao Chef ou ao SubChef."""
+    workflow, calls = create_in_memory_workflow(
+        monkeypatch, ["rejected", "rejected"]
+    )
+    workflow.start(
+        create_initial_state("Make a coxinha.", "thread-accept", max_revisions=2)
+    )
+
+    result = workflow.submit_impasse_decision(
+        "thread-accept",
+        create_decision(
+            "accept",
+            expected_state_version=0,
+            idempotency_key="accept-1",
+        ),
+    )
+
+    assert result["status"] == "completed"
+    assert result["user_action"] == "accept"
+    assert result["state_version"] == 1
+    assert result["final_response"]["recipe"]["title"]
+    assert result["final_response"]["health"]["health_status"] == "insufficient"
+    assert result["final_response"]["image"]["status"] in {"generated", "reused"}
+    assert calls == {"chef": 2, "subchef": 2}

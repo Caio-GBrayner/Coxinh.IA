@@ -5,7 +5,7 @@ Versão 0.5.0 · 22/11/2026 · Português do Brasil
 
 ## 1. Experiência
 
-O Coxinh.IA é um projeto de humor e sátira que transforma combinações improváveis em receitas de coxinha. A pessoa informa o que tem em mãos, acompanha a criação e pode voltar às receitas concluídas durante a mesma sessão.
+O Coxinh.IA é um projeto de humor e sátira que transforma combinações improváveis em receitas de coxinha. A pessoa informa o que tem em mãos, acompanha a criação e pode voltar às receitas concluídas no carrossel global.
 
 O frontend será web, com estilos em CSS. Streamlit não faz parte desta interface. A escolha do framework fica para a implementação. Os layouts podem usar dados simulados durante a construção, mas seus estados e campos devem corresponder ao contrato real do backend.
 
@@ -86,7 +86,7 @@ Se os dados da receita chegarem antes da imagem, apresentar o conteúdo disponí
 
 O `image_prompt` do Cozinheiro descreve a receita final para o provedor de imagem. A escolha inicial para experimentar a integração é **Recraft V4.1 Flash V2 (free)**, acessado pelo OpenRouter. A variante gratuita está anunciada para retirada em **28/11/2026**; por isso o modelo é provisório e a troca de provedor não pode exigir mudanças na apresentação ou no fluxo da receita. Não encaminhar automaticamente a chamada para uma variante paga. Se não houver provedor gratuito disponível, exibir a receita com imagem provisória e o estado de imagem correspondente.
 
-O backend integrado ainda utiliza um provedor simulado. Uma referência simulada não deve ser apresentada como fotografia real gerada. Quando a integração com um provedor real existir, validar se a imagem respeita a massa, o recheio e a descrição visual; guardar na sessão a referência utilizável pela interface.
+O backend usa OpenRouter quando configurado e simulação sem chave. Uma referência simulada não deve ser apresentada como fotografia real gerada. Quando a integração com um provedor real existir, validar se a imagem respeita a massa, o recheio e a descrição visual; guardar a referência utilizável na API persistente.
 
 ## 8. Suas receitas
 
@@ -98,7 +98,7 @@ No desktop, distribuir vários cards conforme a largura disponível. No celular,
 
 Uma nova receita entra no início da sequência sem interromper uma interação em curso. Quando faltar a foto, o card mantém o título e o subtítulo com uma imagem provisória. Respeitar a preferência de movimento reduzido nas transições.
 
-O histórico inicial vive em memória na sessão da aplicação. Uma nova criação usa sua própria execução, e as receitas anteriores da mesma sessão continuam disponíveis. Ao encerrar o processo da aplicação, as receitas em memória são perdidas. Antes da primeira criação, apresentar **“Suas criações aparecem aqui.”**
+O carrossel é global, aprovado por João. SQLite preserva receitas e impasses entre reinícios; o modo opcional em memória perde os dados ao encerrar. Antes da primeira criação, apresentar **“As receitas concluídas da cozinha aparecem aqui.”**
 
 ## 9. Estados e integração
 
@@ -113,7 +113,7 @@ O histórico inicial vive em memória na sessão da aplicação. Uma nova criaç
 
 Na `main`, `RecipeSession` inicia uma execução, consulta seu estado e recebe a decisão de impasse. O histórico registra resultados concluídos pelo identificador da execução. A resposta final organiza `final_response.recipe`, `final_response.health` e `final_response.image`, incluindo `image.status` e `image.url`. O campo `image_prompt` descreve a imagem a gerar. [Sessão da receita](https://github.com/Caio-GBrayner/Coxinh.IA/blob/main/src/recipe_session.py) · [Finalização](https://github.com/Caio-GBrayner/Coxinh.IA/blob/main/src/graph/finalize.py)
 
-Antes da implementação da interface, definir como ela chama `RecipeSession`, como preserva a mesma sessão e o `thread_id` ao navegar ou atualizar a página, e se haverá eventos reais de progresso. Frases de ambientação não devem simular etapas técnicas não observadas. A busca web do agente de saúde está integrada; a ferramenta homônima do MCP é opcional e o servidor padrão ainda não a registra. Não depender dela para exibir o aviso.
+A interface usa `docs/CONTRATO_API.md` e `src/api/app.py`: POST retorna 202 e polling acompanha `running` até estado terminal ou Impasse. O ID ativo é preservado na aba. Frases de ambientação não simulam etapas técnicas não observadas. A pesquisa de saúde continua responsabilidade do backend.
 
 ## 10. Referências de execução e revisão
 
@@ -158,7 +158,7 @@ Antes de encerrar a implementação de cada tela, verificar no navegador ao meno
 
 ## 12. Aplicação da etapa 11
 
-Esta especificação descreve a experiência e a direção visual. Os comportamentos verificáveis estão em [`requirements.md`](requirements.md), e a sequência de trabalho está em [`tasks.md`](tasks.md). [`conteudo_interface.md`](conteudo_interface.md) concentra os textos fixos. A etapa usa o frontend React com TypeScript e Vite em `frontend/`, com estilos CSS próprios, e a API FastAPI em `src/api.py` já preparada nesta branch. O Codex deve conferir os arquivos reais antes de modificar o contrato; não criar uma segunda API, outra implementação do histórico ou uma segunda fonte divergente para os textos.
+Esta especificação descreve a experiência e a direção visual. Os comportamentos verificáveis estão em [`requirements.md`](requirements.md), e a sequência de trabalho está em [`tasks.md`](tasks.md). [`conteudo_interface.md`](conteudo_interface.md) concentra os textos fixos. A etapa usa o frontend React com TypeScript e Vite em `frontend/`, com estilos CSS próprios, e a API FastAPI em `src/api/app.py` já preparada nesta branch. O Codex deve conferir os arquivos reais antes de modificar o contrato; não criar uma segunda API, outra implementação do histórico ou uma segunda fonte divergente para os textos.
 
 ### 12.1 Composição e ativos finais
 
@@ -177,9 +177,11 @@ Os ativos preparados para o navegador devem ficar em uma pasta explícita dentro
 
 O formulário envia texto livre para `POST /api/recipes`. Durante a espera, a montagem mostra o estado textual **Criando receita** e uma sequência 2D fixa, sem percentual ou alegação de evento do grafo. O retorno `completed` abre o resultado, `awaiting_user` abre o Impasse e `cancelled` apresenta encerramento. Falha de rede ou do servidor aparece com ação de recuperação consciente: jamais repetir automaticamente uma criação ou uma decisão cujo resultado possa já ter sido aceito.
 
-O Impasse mostra a crítica recebida, proposta quando existir, orientações e ingredientes já registrados. **Salvar orientação** usa a versão atual, mantém a pausa e não solicita uma nova receita. **Continuar criação** retoma o mesmo `thread_id`; **Encerrar criação** encerra o mesmo fluxo. Conflito de versão exige consultar o estado atual e mostrar o que já foi salvo, preservando os dados ainda digitados.
+O Impasse mostra a crítica recebida, proposta quando existir, orientações e ingredientes já registrados. **Salvar orientação** usa a versão atual, mantém a pausa e não solicita uma nova receita. **Continuar criação** retoma o mesmo `thread_id`; **Aceitar receita como está** envia a decisão `accept` sem incluir campos do formulário não salvos e encaminha a proposta atual diretamente ao Cozinheiro, sem nova rodada do SubChef; **Encerrar criação** encerra o mesmo fluxo. Aceitar só fica disponível quando há uma proposta. Depois do Cozinheiro, a execução mantém aconselhamento de consumo, imagem e finalização. Conflito de versão exige consultar o estado atual e mostrar o que já foi salvo, preservando os dados ainda digitados.
 
-O histórico mostra somente resultados concluídos da sessão atual, começa pela receita mais recente na apresentação e mantém o mesmo ID de cada card ao navegar. O carrossel volta ao começo ou ao fim pelas setas e pelo deslize, sem duplicar registros ou controles acessíveis. A abertura de um card revela o resultado completo dessa execução. Voltar preserva a posição no carrossel.
+A API fornece `/images/<arquivo>` ou null; o frontend valida nomes simples PNG/JPG/JPEG/WebP/SVG e compõe a URL com o endereço da API. O proxy local remove `/api`; imagens são globais, com fallback para simulação, recurso indisponível ou falha de carregamento.
+
+O histórico mostra resumos globais de resultados concluídos, começa pela receita mais recente na apresentação e mantém o mesmo ID de cada card ao navegar. O carrossel volta ao começo ou ao fim pelas setas e pelo deslize, sem duplicar registros ou controles acessíveis. A abertura de um card consulta `GET /recipes/{id}` e revela o resultado completo dessa execução. Voltar preserva a posição no carrossel.
 
 ### 12.3 Revisão com as referências de design
 

@@ -45,7 +45,7 @@ export function useRecipeSession() {
     async function refreshHistory() {
         try {
             const recipes = await listRecipes();
-            setHistory([...recipes].reverse());
+            setHistory(recipes);
             setHistoryError("");
         } catch {
             setHistoryError(copy.historyFailure);
@@ -68,7 +68,7 @@ export function useRecipeSession() {
     useEffect(() => {
         if (booted.current) return;
         booted.current = true;
-        // Establish the cookie first; parallel initial calls can create two sessions.
+        // Restore the active ID; the gallery is shared by all browsers.
         void (async () => {
             await refreshHistory();
             const id = storage.get(activeKey);
@@ -76,18 +76,60 @@ export function useRecipeSession() {
             setReady(true);
         })();
     }, []);
+    // Only GET is retried. Cleanup prevents stale results after navigation/unmount.
+    useEffect(() => {
+        if (active?.status !== "running" || needsRefresh) return;
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout>;
+        const id = active.thread_id;
+        async function poll() {
+            try {
+                const next = await getRecipe(id);
+                if (stopped) return;
+                if (next.status === "running") {
+                    setActive(next);
+                    timer = setTimeout(() => void poll(), 1000);
+                } else {
+                    try {
+                        const recipes = await listRecipes();
+                        if (!stopped) {
+                            setHistory(recipes);
+                            setHistoryError("");
+                        }
+                    } catch {
+                        if (!stopped) setHistoryError(copy.historyFailure);
+                    }
+                    if (!stopped) setActive(next);
+                }
+            } catch {
+                if (!stopped) {
+                    setNeedsRefresh(true);
+                    setMessage(copy.failure);
+                }
+            }
+        }
+        timer = setTimeout(() => void poll(), 1000);
+        return () => {
+            stopped = true;
+            clearTimeout(timer);
+        };
+    }, [active?.thread_id, active?.status, needsRefresh]);
     async function create(input: string) {
-        if (locked.current || !ready) return;
+        if (locked.current || !ready || active?.status === "running") return;
         locked.current = true;
         setBusy(true);
         setMessage("");
         try {
             accept(await createRecipe(input));
             await refreshHistory();
-        } catch {
-            // The ID arrives only after execution; never automatically retry a POST.
+        } catch (error) {
+            // The server may have accepted this request; never automatically retry a POST.
             await refreshHistory();
-            setMessage(copy.unknownCreation);
+            setMessage(
+                error instanceof RecipeApiError
+                    ? error.message
+                    : copy.unknownCreation,
+            );
         } finally {
             locked.current = false;
             setBusy(false);
@@ -98,7 +140,14 @@ export function useRecipeSession() {
         additions: string[],
         guidance: string,
     ) {
-        if (!active || locked.current || needsRefresh) return false;
+        if (
+            !active ||
+            active.status !== "awaiting_user" ||
+            active.state_version === undefined ||
+            locked.current ||
+            needsRefresh
+        )
+            return false;
         locked.current = true;
         setBusy(true);
         setMessage("");
@@ -124,7 +173,9 @@ export function useRecipeSession() {
                 setMessage(
                     error instanceof RecipeApiError && error.status === 409
                         ? copy.conflict
-                        : copy.failure,
+                        : error instanceof RecipeApiError
+                          ? error.message
+                          : copy.failure,
                 );
             return false;
         } finally {
@@ -146,7 +197,7 @@ export function useRecipeSession() {
     return {
         active,
         history,
-        busy,
+        busy: busy || (active?.status === "running" && !needsRefresh),
         ready,
         message,
         historyError,

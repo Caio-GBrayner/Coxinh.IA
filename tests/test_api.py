@@ -284,3 +284,24 @@ def test_save_does_not_run_agents_and_stale_resume_preserves_state(client, calls
     assert stale.status_code == 409
     assert client.get(f'/recipes/{thread_id}').json() == saved.json()
     assert calls == before
+
+
+def test_accept_preserves_pipeline_without_rerunning_review(client, calls):
+    thread_id = start_paused(client)
+    before = dict(calls)
+    assert decide(client, thread_id, 'accept', 0, 'accept-pipeline').status_code == 202
+    final = client.get(f'/recipes/{thread_id}').json()['final_response']
+    assert final['health']
+    assert final['image']
+    assert calls['chef'] == before['chef']
+    assert calls['subchef'] == before['subchef']
+
+
+def test_local_image_endpoint_rejects_symlink_outside_storage(client, tmp_path):
+    outside = tmp_path.parent / 'outside.png'
+    outside.write_bytes(b'outside')
+    try:
+        (tmp_path / 'linked.png').symlink_to(outside)
+    except OSError:
+        pytest.skip('Symlink creation unavailable on this account.')
+    assert client.get('/images/linked.png').status_code == 404

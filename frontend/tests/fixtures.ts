@@ -1,7 +1,6 @@
 import type { Page } from "@playwright/test";
 import type {
     RecipeView,
-    SavedRecipe,
     FinalResponse,
     DecisionRequest,
 } from "../src/recipeTypes";
@@ -38,8 +37,7 @@ export function view(
         thread_id: id,
         status,
         state_version: 0,
-        revision_count: 2,
-        max_revisions: 2,
+        error: null,
         critique: "Ajuste o preparo desta combinação.",
         recipe: { ...finalResponse.recipe, preparation: "Prepare a massa." },
         ingredient_additions: [],
@@ -52,24 +50,26 @@ export async function mockApi(
     page: Page,
     options: {
         initial?: RecipeView;
-        history?: SavedRecipe[];
+        history?: Array<FinalResponse & { id: string }>;
         createStatus?: RecipeView["status"];
         delay?: number;
         conflict?: boolean;
         missing?: boolean;
         networkCreate?: boolean;
         networkDecision?: boolean;
+        runningReads?: number;
     } = {},
 ) {
     let current = options.initial || view(options.createStatus || "completed");
     let history = options.history || [];
     let creates = 0;
     let reads = 0;
+    let pendingReads = -1;
     const decisions: DecisionRequest[] = [];
     await page.route("**/api/recipes**", async (route) => {
         const req = route.request();
         const path = new URL(req.url()).pathname;
-        if (path.endsWith("/decisions")) {
+        if (path.endsWith("/impasse")) {
             const body = req.postDataJSON() as DecisionRequest;
             decisions.push(body);
             if (options.networkDecision) {
@@ -84,13 +84,18 @@ export async function mockApi(
                 };
                 await route.fulfill({
                     status: 409,
-                    json: { detail: "Conflict" },
+                    json: {
+                        detail: {
+                            code: "state_version_conflict",
+                            message: "Conflict",
+                        },
+                    },
                 });
                 return;
             }
             current = {
                 ...current,
-                state_version: current.state_version + 1,
+                state_version: (current.state_version || 0) + 1,
                 status:
                     body.action === "save"
                         ? "awaiting_user"
@@ -98,7 +103,7 @@ export async function mockApi(
                           ? "cancelled"
                           : "completed",
                 ingredient_additions: [
-                    ...current.ingredient_additions,
+                    ...(current.ingredient_additions || []),
                     ...(body.ingredient_additions || []),
                 ],
                 user_guidance: body.user_guidance || current.user_guidance,
@@ -110,7 +115,13 @@ export async function mockApi(
                     ...current.final_response,
                 });
             }
-            await route.fulfill({ json: current });
+            if (["resume", "accept"].includes(body.action)) {
+                pendingReads = options.runningReads ?? 1;
+                await route.fulfill({
+                    status: 202,
+                    json: { thread_id: current.thread_id, status: "running" },
+                });
+            } else await route.fulfill({ json: current });
             return;
         }
         if (path === "/api/recipes" && req.method() === "POST") {
@@ -132,11 +143,32 @@ export async function mockApi(
                     id: current.thread_id,
                     ...current.final_response,
                 });
-            await route.fulfill({ status: 201, json: current });
+            pendingReads = options.runningReads ?? 1;
+            await route.fulfill({
+                status: 202,
+                json: { thread_id: current.thread_id, status: "running" },
+            });
             return;
         }
         if (path === "/api/recipes") {
-            await route.fulfill({ json: history });
+            await route.fulfill({
+                json: {
+                    items: [...history]
+                        .filter(
+                            (item) =>
+                                item.id !== current.thread_id ||
+                                pendingReads < 0,
+                        )
+                        .reverse()
+                        .map((item) => ({
+                            id: item.id,
+                            title: item.recipe.title,
+                            subtitle: item.recipe.subtitle,
+                            image_url: item.image.url,
+                            image_status: item.image.status,
+                        })),
+                },
+            });
             return;
         }
         reads++;
@@ -147,7 +179,29 @@ export async function mockApi(
             });
             return;
         }
-        await route.fulfill({ json: current });
+        if (pendingReads-- > 0) {
+            await route.fulfill({
+                json: {
+                    thread_id: current.thread_id,
+                    status: "running",
+                    error: null,
+                },
+            });
+            return;
+        }
+        const id = decodeURIComponent(path.split("/").pop()!);
+        const saved = history.find((item) => item.id === id);
+        await route.fulfill({
+            json:
+                id === current.thread_id
+                    ? current
+                    : saved
+                      ? {
+                            ...view("completed", id),
+                            final_response: saved,
+                        }
+                      : current,
+        });
     });
     return {
         decisions,

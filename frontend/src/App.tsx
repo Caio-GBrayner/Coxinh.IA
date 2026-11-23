@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import type { SavedRecipe } from "./recipeTypes";
+import { getRecipe } from "./recipeApi";
+import type { FinalResponse, SavedRecipe } from "./recipeTypes";
 import { copy } from "./content";
 import { useRecipeSession } from "./useRecipeSession";
 import { Impasse } from "./Impasse";
@@ -12,7 +13,9 @@ function App() {
     const session = useRecipeSession();
     const [idea, setIdea] = useState("");
     const [inputError, setInputError] = useState("");
-    const [detail, setDetail] = useState<SavedRecipe | null>(null);
+    const [detail, setDetail] = useState<FinalResponse | null>(null);
+    const [detailError, setDetailError] = useState("");
+    const detailRequest = useRef(0);
     const [motionPaused, setMotionPaused] = useState(false);
     const workflow = useRef<HTMLElement>(null);
     const previousStatus = useRef("");
@@ -26,6 +29,22 @@ function App() {
     useEffect(() => {
         if (session.busy) workflow.current?.focus();
     }, [session.busy]);
+    async function openRecipe(recipe: SavedRecipe) {
+        const request = ++detailRequest.current;
+        setDetailError("");
+        setDetail(null);
+        try {
+            const view = await getRecipe(recipe.id);
+            if (request !== detailRequest.current) return;
+            if (view.status !== "completed" || !view.final_response)
+                throw new Error(copy.incomplete);
+            setDetail(view.final_response);
+            requestAnimationFrame(() => workflow.current?.focus());
+        } catch {
+            if (request === detailRequest.current)
+                setDetailError(copy.unavailable);
+        }
+    }
     function focusIdea() {
         document.getElementById("idea")?.focus();
     }
@@ -37,7 +56,9 @@ function App() {
             return;
         }
         setInputError("");
+        detailRequest.current++;
         setDetail(null);
+        setDetailError("");
         await session.create(idea.trim());
         workflow.current?.focus();
     }
@@ -83,6 +104,7 @@ function App() {
                         <textarea
                             id="idea"
                             rows={4}
+                            maxLength={4000}
                             value={idea}
                             onChange={(event) => setIdea(event.target.value)}
                             aria-invalid={!!inputError}
@@ -153,6 +175,7 @@ function App() {
                 {(session.busy ||
                     session.active ||
                     session.message ||
+                    detailError ||
                     detail) && (
                     <section
                         id="workflow"
@@ -161,6 +184,7 @@ function App() {
                         tabIndex={-1}
                         aria-label={copy.active}
                     >
+                        {detailError && <p role="alert">{detailError}</p>}
                         {session.message && (
                             <div className="notice" role="status">
                                 <p>{session.message}</p>
@@ -190,7 +214,7 @@ function App() {
                                 <p>{copy.atmosphere}</p>
                             </div>
                         )}
-                        {session.active && (
+                        {session.active?.status === "awaiting_user" && (
                             <div
                                 hidden={
                                     !!detail ||
@@ -240,21 +264,24 @@ function App() {
                         {!session.busy && !detail && status === "cancelled" && (
                             <h2>{copy.cancelled}</h2>
                         )}
-                        {!session.busy && !detail && status === "error" && (
-                            <p role="status">{copy.executionError}</p>
-                        )}
                         {!session.busy &&
                             !detail &&
-                            ["in_revision", "approved"].includes(status) && (
+                            ["error", "interrupted"].includes(status) && (
                                 <p role="status">
-                                    {copy.running}{" "}
-                                    <button
-                                        onClick={() => void session.refresh()}
-                                    >
-                                        {copy.refresh}
-                                    </button>
+                                    {status === "interrupted"
+                                        ? copy.interrupted
+                                        : session.active?.error ||
+                                          copy.executionError}
                                 </p>
                             )}
+                        {!session.busy && !detail && status === "running" && (
+                            <p role="status">
+                                {copy.running}{" "}
+                                <button onClick={() => void session.refresh()}>
+                                    {copy.refresh}
+                                </button>
+                            </p>
+                        )}
                     </section>
                 )}
                 <section id="story" className="story section">
@@ -284,10 +311,7 @@ function App() {
                     recipes={session.history}
                     error={session.historyError}
                     refresh={session.refreshHistory}
-                    open={(recipe) => {
-                        setDetail(recipe);
-                        requestAnimationFrame(() => workflow.current?.focus());
-                    }}
+                    open={(recipe) => void openRecipe(recipe)}
                 />
             </main>
             <footer>
