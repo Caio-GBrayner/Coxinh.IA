@@ -7,8 +7,8 @@ from src.schemas import NonEmptyText
 from src.state import RecipeState
 
 
-ImpasseAction = Literal["save", "resume", "cancel"]
-ImpasseDestination = Literal["chef", "impasse", "end"]
+ImpasseAction = Literal["save", "resume", "accept", "cancel"]
+ImpasseDestination = Literal["chef", "impasse", "cook", "end"]
 
 
 class ImpasseDecision(BaseModel):
@@ -26,10 +26,12 @@ class ImpasseDecision(BaseModel):
             raise ValueError(
                 "A save action must include an ingredient or user guidance."
             )
-        if self.action == "cancel" and (
+        if self.action in ("accept", "cancel") and (
             self.ingredient_additions or self.user_guidance
         ):
-            raise ValueError("A cancel action cannot include workflow updates.")
+            raise ValueError(
+                f"A {self.action} action cannot include workflow updates."
+            )
 
         return self
 
@@ -97,6 +99,8 @@ def record_impasse_decision(
     if decision.action == "resume":
         updates["revision_count"] = 0
         updates["status"] = "in_revision"
+    elif decision.action == "accept":
+        updates["status"] = "approved"
     elif decision.action == "cancel":
         updates["status"] = "cancelled"
     else:
@@ -132,6 +136,8 @@ def route_after_impasse(state: RecipeState) -> ImpasseDestination:
         return "impasse"
     if status == "in_revision" and action == "resume":
         return "chef"
+    if status == "approved" and action == "accept":
+        return "cook"
     if status == "cancelled" and action == "cancel":
         return "end"
 

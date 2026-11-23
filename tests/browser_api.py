@@ -49,6 +49,8 @@ builder.health_node = lambda _: {
 }
 builder.image_node = lambda _: {"image_status": "generated", "image_url": "simulated://browser-test"}
 
-from src.api import create_app  # noqa: E402
+from src.api.app import create_app  # noqa: E402
 
-app = create_app()
+from src.recipe_session import RecipeSession
+
+app = create_app(RecipeSession())

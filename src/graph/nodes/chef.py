@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from src.graph.prompts.chef import CHEF_PROMPT
 from src.schemas import NonEmptyText, Recipe, SubChefEvaluation
 from src.state import RecipeState
-from src.utils.llm_adapter import call_llm
+from src.utils.llm_adapter import call_llm, invoke_structured
 
 
 class ChefContext(BaseModel):
@@ -62,8 +62,9 @@ def chef_node(state: RecipeState) -> dict[str, object]:
         CHEF_TEMPERATURE
     ).with_structured_output(Recipe)
     recipe = Recipe.model_validate(
-        structured_model.invoke(
-            {"context": context.model_dump_json(exclude_none=True)}
+        invoke_structured(
+            structured_model,
+            {"context": context.model_dump_json(exclude_none=True)},
         )
     )
 

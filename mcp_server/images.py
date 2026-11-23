@@ -105,14 +105,15 @@ def build_idempotency_key(
 def build_image_request(recipe: Recipe, image_prompt: str) -> str:
     """Pedido ao provedor, fiel à receita final e sem apresentá-la como real."""
     return (
-        "Crie uma imagem ilustrativa e fictícia de uma coxinha baseada nesta "
+        "Crie uma fotografia realista de uma coxinha, com luz natural e textura "
+        "real, sem desenho, ilustração, cartoon, pintura ou arte digital, baseada nesta "
         f"descrição:\n{_clean(image_prompt)}\n\n"
         f"Massa: {_clean(recipe.dough)}\n"
         f"Recheio: {_clean(recipe.filling)}\n"
         f"Ingredientes: {', '.join(_clean(item) for item in recipe.ingredients)}\n"
         "Métodos de preparo: "
         f"{', '.join(_clean(item) for item in recipe.preparation_methods)}\n\n"
-        "Não apresente a imagem como fotografia de um alimento real ou seguro "
+        "Trata-se de uma coxinha fictícia, não de um alimento real ou seguro "
         "para consumo."
     )
 
