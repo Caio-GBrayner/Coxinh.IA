@@ -58,6 +58,16 @@ print(result.get("final_response"))
 
 `create_initial_state` monta a entrada e define o limite inicial de duas revisões. `session.start` executa o grafo até concluir ou aguardar uma decisão no Impasse. `result` contém o estado atual; `final_response` só aparece ao concluir. Consulte `session.get_state("receita-1")` para ler essa execução e `session.history.list_recipes()` para listar receitas concluídas na mesma instância. O fluxo pode chamar provedores externos e consumir cotas gratuitas conforme sua configuração.
 
+## Rodar a API e a persistência
+
+A API HTTP é a porta de entrada do front. Por padrão (`PERSISTENCE=sqlite`), receitas, impasses em aberto e checkpoints ficam em `data/` e sobrevivem a reinícios.
+
+```bash
+uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8080
+```
+
+O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a API rodando, em `http://127.0.0.1:8080/docs`. Para subir API e servidor MCP juntos, com volume persistente: `docker compose up --build`. Para testar o fluxo pelo terminal: `python -m src.app.main --livre` (ou `--demo-impasse`, sem LLM no Chef e no SubChef).
+
 ## Estrutura principal
 
 | Caminho | Função |
@@ -73,7 +83,7 @@ print(result.get("final_response"))
 
 ## Limites da versão atual
 
-O histórico e os checkpoints vivem em memória: são preservados enquanto a mesma instância da aplicação estiver ativa e desaparecem quando o processo termina. Ainda não existe banco de dados nem persistência entre reinícios. Não há interface web pronta para navegar pelas receitas. O provedor de imagem real e o Langfuse também não estão integrados; a documentação será atualizada quando essas etapas forem concluídas.
+A API roda em um único processo: vários processos sobre o mesmo banco SQLite não são suportados. Uma geração interrompida por queda vira `interrupted` e precisa ser refeita; impasses em aberto sobrevivem. A interface web está em construção. A imagem real depende de `OPENROUTER_API_KEY`; sem ela, o provedor simulado é usado e nenhuma imagem aparece no site.
 
 O parecer de saúde é informativo. Trechos encontrados na web exigem interpretação cuidadosa e não tornam uma receita segura para consumo. A presença de uma URL indica a origem do trecho utilizado, sem certificar a qualidade da fonte.
 

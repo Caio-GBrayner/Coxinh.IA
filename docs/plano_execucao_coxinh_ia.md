@@ -391,7 +391,8 @@ Estado do projeto em 2026-11-22, conforme o código integrado na `main`:
 * Etapa 10.1: pendente, para integrar provedor real gratuito e fechar a entrega da imagem.
 * Etapa 11.0: pendente, README e textos fixos da interface, por João com revisão de Caio.
 * Etapa 11: pendente, interface web definida em `docs/design/design.md`, sem Streamlit.
-* Etapa 12: pendente. Não há dependência nem instrumentação Langfuse no código.
+* Etapa 12: em andamento. Langfuse e LangSmith instrumentados (`src/observability.py`), ativos quando as chaves existem.
+* Etapa 13: persistência em SQLite e API HTTP (FastAPI) implementadas, com teste de queda. Contrato em `docs/CONTRATO_API.md`.
 * Persistência durável em banco de dados: fora do MVP atual; sessão, checkpoints e índice de imagem permanecem em memória.
 
 | # | Decisão | Situação | Etapas |
@@ -408,7 +409,7 @@ Estado do projeto em 2026-11-22, conforme o código integrado na `main`:
 | 10 | A base RAG fica fora do MVP. A busca web via Tavily é a fonte conectada ao nó de saúde. | Decidida | 9 |
 | 11 | Nomes reais de Pessoa A e Pessoa B. | **Pendente** | Todas |
 | 12 | Contrato de idempotência em memória entregue. Testar inicialmente Recraft V4.1 Flash V2 gratuito via OpenRouter, com substituição configurável; a variante gratuita está anunciada para retirada em 28/11/2026. Não usar automaticamente modelo pago. | Provedor real pendente | 10.1 |
-| 13 | No MVP, sessão, checkpoints e índice de imagens ficam em memória e são perdidos no reinício. A proposta anterior de dois arquivos SQLite pode ser reavaliada em etapa futura, fora do escopo atual. | Escopo do MVP decidido; tecnologia futura em aberto | Futura |
+| 13 | Persistência em SQLite: checkpoints do LangGraph (`data/checkpoints.db`), receitas concluídas e decisões do Impasse (`data/coxinh.db`), imagens em `data/images`. `PERSISTENCE=memory` mantém o modo do MVP. Um processo da API por vez. Contrato em `docs/CONTRATO_API.md`. | Decidida e implementada | 13 |
 | 14 | Política de privacidade e retenção de traces no Langfuse. | **Pendente** | 12 |
 | 15 | Servidor MCP com FastMCP (sobre o SDK oficial `mcp`) e transporte streamable HTTP entre os serviços `app` e `mcp` do Docker Compose. Substitui a decisão anterior de usar `stdio`. | Decidida (revisada) | 10 |
 | 16 | Idempotência da imagem em memória no MVP, com garantias e limites documentados. | Decidida | 10 |
