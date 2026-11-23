@@ -20,10 +20,10 @@ Complementa `docs/plano_execucao_coxinh_ia.md` (etapa 10 e seção 6). Em caso d
 
 | Serviço | Responsabilidade | Persistência |
 | --- | --- | --- |
-| `app` | Aplicação, grafo LangGraph, estado das conversas e decisões do Impasse. | SQLite próprio, em volume próprio (etapa de persistência). |
-| `mcp` | Ferramentas sem estado compartilhado: `validate_recipe_resources`, `generate_coxinha_image` e `search_web`. | SQLite próprio com o índice de imagens, em volume próprio. |
+| `app` (serviço `api`) | API HTTP, grafo LangGraph, estado das conversas e decisões do Impasse. | SQLite (`data/coxinh.db` e `data/checkpoints.db`) no volume `coxinh-data`. |
+| `mcp` | Ferramentas sem estado compartilhado: `validate_recipe_resources`, `generate_coxinha_image` e `search_web`. | Arquivos de imagem em `data/images`, no mesmo volume, nomeados pela chave de idempotência. |
 
-Os dois serviços não compartilham arquivo SQLite. A aplicação chama o `mcp` por HTTP, por exemplo em `http://mcp:8000/mcp`.
+Os dois serviços não compartilham arquivo SQLite; compartilham apenas a pasta de imagens, que a `api` serve em `/images`. A aplicação chama o `mcp` por HTTP, por exemplo em `http://mcp:8000/mcp`.
 
 **Estado do Impasse.** O estado vive na aplicação (`InMemoryWorkflow`, em `src/graph/workflow.py`), e o plano proíbe criar uma segunda cópia dele no servidor. Por isso `record_impasse_decision` fica no processo da aplicação, que a expõe pela mesma interface de ferramenta, sem passar pelo container `mcp`. Registrar a ferramenta com `create_server(session=session)`, reutilizando a mesma `RecipeSession` da aplicação.
 
@@ -82,10 +82,10 @@ Códigos de erro previstos:
 | Campo | Tipo | Observação |
 | --- | --- | --- |
 | `thread_id` | texto | Identificador estável da conversa. |
-| `action` | `save`, `resume` ou `cancel` | |
+| `action` | `save`, `resume`, `accept` ou `cancel` | `accept` segue a receita rejeitada para o Cozinheiro. |
 | `expected_state_version` | inteiro ≥ 0 | Versão que o pedido esperava encontrar. |
 | `idempotency_key` | texto não vazio | Repetir a mesma chave com o mesmo conteúdo devolve o resultado original. |
-| `ingredient_additions` | lista de textos | Obrigatório em `save` se não houver `user_guidance`; proibido em `cancel`. |
+| `ingredient_additions` | lista de textos | Obrigatório em `save` se não houver `user_guidance`; proibido em `accept` e `cancel`. |
 | `user_guidance` | texto ou `null` | Mesma regra. |
 
 As regras de combinação vêm de `ImpasseDecision` e não são reescritas no servidor.
@@ -94,7 +94,9 @@ As regras de combinação vêm de `ImpasseDecision` e não são reescritas no se
 
 **Erros:** `invalid_input`, `workflow_not_found`, `workflow_not_paused`, `state_version_conflict`, `idempotency_key_reuse`.
 
-**Atenção:** com `resume`, a chamada continua o grafo (Chef, SubChef, Cozinheiro, Saúde) até concluir ou pausar de novo. Ela pode demorar e chamar o LLM. O cliente deve ter um tempo limite adequado. `save` e `cancel` não chamam o LLM.
+**Atenção:** com `resume`, a chamada continua o grafo (Chef, SubChef, Cozinheiro, Saúde) até concluir ou pausar de novo; com `accept`, segue direto para Cozinheiro, Saúde, Imagem e finalização. As duas podem demorar e chamar o LLM. O cliente deve ter um tempo limite adequado. `save` e `cancel` não chamam o LLM.
+
+**Uso atual:** o caminho oficial do Impasse para o front é a API HTTP (`POST /recipes/{thread_id}/impasse`, ver `docs/CONTRATO_API.md`). Esta ferramenta continua disponível para testes e clientes MCP, mas usa uma `RecipeSession` própria quando registrada fora da API.
 
 ### 4.3 `generate_coxinha_image`
 

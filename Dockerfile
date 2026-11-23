@@ -11,5 +11,7 @@ COPY src ./src
 COPY mcp_server ./mcp_server
 RUN pip install --no-cache-dir .
 
-RUN useradd --create-home --uid 10001 coxinh
+RUN useradd --create-home --uid 10001 coxinh \
+    && mkdir -p /app/data/images \
+    && chown -R coxinh /app/data
 USER coxinh

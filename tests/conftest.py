@@ -20,6 +20,12 @@ def isolate_tool_client(monkeypatch):
     monkeypatch.setenv("MCP_SERVER_URL", "")
     # Sem chave, o servidor padrão usa o provedor simulado: nenhum teste gera custo.
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    # Nenhum teste envia rastros: sem isso, o .env real ativaria Langfuse e LangSmith.
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "")
+    monkeypatch.setenv("LANGSMITH_TRACING", "false")
+    # Os testes nunca gravam no banco do projeto (data/).
+    monkeypatch.setenv("PERSISTENCE", "memory")
     mcp_client.reset_default_client()
     yield
     mcp_client.reset_default_client()
