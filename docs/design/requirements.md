@@ -23,8 +23,8 @@ O frontend é React, TypeScript e CSS em `frontend/`. O desenvolvimento local us
 | RF09 | Aconselhamento separado. | Mostra `health.warning`, contraindicações, fontes com título e URL, incerteza e estados `pending`, `ok`, `insufficient` ou `unavailable`. Não apresenta selo de segurança ou endosso médico real. |
 | RF10 | Imagem tolerante a falhas. | Exibe foto apenas para imagem concluída por referência restrita `/images/<arquivo>` resolvida usando a URL da API. `simulated://`, caminho/nome inválido, arquivo indisponível, imagem pendente, falha ou carregamento quebrado produzem alternativa visual com texto; a receita continua legível. |
 | RF11 | Carrossel global. | `GET /recipes` alimenta cards de receitas concluídas, com ID, título, subtítulo e foto ou alternativa. Histórico vazio tem mensagem própria. Todos os navegadores veem a mesma lista. |
-| RF12 | Carrossel infinito controlado. | Avançar após a última volta à primeira e recuar antes da primeira volta à última; há setas, teclado e deslize no celular. Uma receita mostra só um card. O clique abre a receita correspondente e o retorno preserva a posição. |
-| RF13 | História editorial. | Mostra o texto aprovado e as imagens da turma na ordem definida; o bloco da dupla usa o texto aprovado sem simular a foto ainda pendente. |
+| RF12 | Carrossel infinito pelas setas. | Avançar após a última volta à primeira e recuar antes da primeira volta à última pelas setas; a rolagem vertical não altera a seleção. Uma receita mostra só um card. O clique abre a receita correspondente e o retorno preserva a posição. |
+| RF13 | História editorial. | Mostra o texto aprovado, as imagens da turma na ordem definida e a foto de João e Caio abaixo dos nomes no bloco da dupla. |
 | RF14 | Estados de erro. | Falhas de rede e servidor aparecem em português; erros não apagam a entrada da pessoa nem provocam repetição automática de uma ação possivelmente concluída. |
 
 ## 3. Contrato de dados e persistência
@@ -41,7 +41,7 @@ Erros usam `detail.code` e `detail.message`; validação 422 usa a lista padrão
 
 A API usa SQLite por padrão. O carrossel é global, sem autenticação nem isolamento por cookie. Somente ID ativo e posição do carrossel ficam no `sessionStorage`. Impasses persistidos sobrevivem ao reinício; execução interrompida não retoma automaticamente. `PERSISTENCE=memory` é uma opção sem durabilidade.
 
-O proxy de desenvolvimento remove `/api` ao encaminhar à API em 8080. `VITE_API_URL` configura outro endereço, também usado para imagens. Em produção sem essa variável, configurar o mesmo proxy no servidor web.
+O proxy de desenvolvimento remove `/api` ao encaminhar à API em 8081. `VITE_API_URL` configura outro endereço, também usado para imagens. Em produção sem essa variável, configurar o mesmo proxy no servidor web.
 
 As funções `createRecipe`, `getRecipe`, `submitDecision` e `listRecipes` de `frontend/src/recipeApi.ts` e os tipos de `frontend/src/recipeTypes.ts` são o ponto de partida. Confirmar os valores de `image.status` retornados pelo backend ou pela etapa 10.1 antes de restringir sua apresentação a uma enumeração no frontend. Não colocar chaves de LLM, Tavily ou OpenRouter no JavaScript do navegador.
 
@@ -74,4 +74,4 @@ Testes automatizados usam API/modelos simulados quando necessário. A revisão v
 
 ## 6. Limites e pendências de conteúdo
 
-A foto da dupla e a foto cenográfica do personagem fictício de saúde ainda dependem de escolha. Podem ter área reservada no rascunho, mas a interface completa continua legível sem elas. Os recortes de produção da abertura exigem preparação a partir das referências e verificação de uso; não publicar uma referência com marca d'água. O provedor real de imagens é responsabilidade da etapa 10.1. A observabilidade Langfuse e persistência durável estão fora do escopo da etapa 11.
+A foto da dupla foi escolhida em `docs/design/dupla.png` e aparece abaixo dos nomes no bloco editorial. A foto cenográfica do personagem fictício de saúde ainda depende de escolha; o aconselhamento continua legível sem ela. Os recortes de produção da abertura exigem preparação a partir das referências e verificação de uso; não publicar uma referência com marca d'água. O provedor real de imagens é responsabilidade da etapa 10.1. A observabilidade Langfuse e persistência durável estão fora do escopo da etapa 11.

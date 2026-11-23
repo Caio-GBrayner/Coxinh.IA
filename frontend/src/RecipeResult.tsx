@@ -28,7 +28,13 @@ export function RecipeImage({
     if (url && usable && failedUrl !== url)
         return (
             <figure className="recipe-photo">
-                <img src={url} alt={title} onError={() => setFailedUrl(url)} />
+                <div className="recipe-photo-frame">
+                    <img
+                        src={url}
+                        alt={title}
+                        onError={() => setFailedUrl(url)}
+                    />
+                </div>
                 <figcaption>{copy.imageCredit}</figcaption>
             </figure>
         );

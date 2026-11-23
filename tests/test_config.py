@@ -6,6 +6,7 @@ from src import config
 
 def test_loads_valid_configuration(monkeypatch):
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
     monkeypatch.setenv("LLM_KEY", " test-key ")
     monkeypatch.setenv("LLM_MODEL", " test-model ")
 
@@ -13,6 +14,20 @@ def test_loads_valid_configuration(monkeypatch):
 
     assert result.api_key.get_secret_value() == "test-key"
     assert result.model == "test-model"
+    assert result.provider == "groq"
+
+
+def test_loads_google_configuration(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("LLM_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", " google-test-key ")
+    monkeypatch.setenv("LLM_MODEL", "gemini-test-model")
+
+    result = config.load_llm_config()
+
+    assert result.api_key.get_secret_value() == "google-test-key"
+    assert result.model == "gemini-test-model"
+    assert result.provider == "google"
 
 
 @pytest.mark.parametrize(
@@ -28,6 +43,7 @@ def test_loads_valid_configuration(monkeypatch):
 )
 def test_rejects_invalid_configuration(monkeypatch, variable, value):
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
     monkeypatch.setenv("LLM_KEY", "test-key")
     monkeypatch.setenv("LLM_MODEL", "test-model")
 
@@ -37,6 +53,16 @@ def test_rejects_invalid_configuration(monkeypatch, variable, value):
         monkeypatch.setenv(variable, value)
 
     with pytest.raises(ValueError, match=variable):
+        config.load_llm_config()
+
+
+def test_rejects_google_configuration_without_google_key(monkeypatch):
+    monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("LLM_PROVIDER", "google")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_MODEL", "gemini-test-model")
+
+    with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
         config.load_llm_config()
 
 

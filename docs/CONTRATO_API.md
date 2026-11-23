@@ -3,7 +3,7 @@
 Porta de entrada do front. Implementação em `src/api/app.py`. O contrato completo e interativo fica em `/docs` (OpenAPI) com a API rodando.
 
 ```bash
-uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8080
+uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8081
 ```
 
 ## Como o front usa

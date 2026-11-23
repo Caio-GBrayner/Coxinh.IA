@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: process.env.COXINH_API_TARGET || 'http://127.0.0.1:8080',
+        target: process.env.COXINH_API_TARGET || 'http://127.0.0.1:8081',
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },

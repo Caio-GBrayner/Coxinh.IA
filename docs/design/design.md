@@ -62,7 +62,7 @@ Logo abaixo da abertura, a seção **“Da Deloitte à Coxinh.IA”** apresenta 
 
 Em seguida aparecem a ilustração da turma em `docs/design/turma_ilustrada.png` e a foto real que serviu de base em `docs/design/turma_bootcamp.png`. Usar enquadramentos próximos e molduras com leves deslocamentos para relacionar as duas imagens ao rolar. No celular, empilhar os blocos e preservar títulos e texto inteiros.
 
-A foto de João e Caio aparece no bloco **“A dupla por trás do Coxinh.IA”**, com título expressivo e moldura de fotografia. A foto da dupla ainda será selecionada; o espaço reservado no rascunho representa esse ativo pendente.
+A foto `dupla.png` aparece abaixo do nome **João & Caio** no bloco **“A dupla por trás do Coxinh.IA”**, em uma moldura quadrada que preserva os dois retratados. Em telas estreitas, o nome, a foto e o texto ficam empilhados.
 
 ## 6. Montagem
 
@@ -92,7 +92,7 @@ O backend usa OpenRouter quando configurado e simulação sem chave. Uma referê
 
 A Home reúne as receitas concluídas em um **carrossel horizontal infinito**. Cada card traz **foto, título e subtítulo**, com imagem grande e hierarquia editorial de cardápio. Ao avançar além da última receita, o carrossel volta à primeira. Ao recuar além da primeira, volta à última. A ordem inicial começa pela receita mais recente.
 
-Setas visíveis permitem avançar e voltar no desktop e no celular. Também aceitar deslize no celular e navegação por teclado nos controles. Como comportamento inicial, o avanço ocorre por interação da pessoa. O clique em um card abre a receita completa. Ao voltar ao carrossel, preservar a posição de leitura.
+Setas visíveis permitem avançar e voltar no desktop e no celular. A passagem entre receitas acontece pelas setas; a rolagem vertical da página não altera a seleção. O clique em um card abre a receita completa. Ao voltar ao carrossel, preservar a posição de leitura.
 
 No desktop, distribuir vários cards conforme a largura disponível. No celular, mostrar um card principal e parte do próximo para indicar continuidade. Com uma única receita, apresentar apenas seu card. Com o histórico vazio, apresentar a mensagem definida abaixo. A repetição visual usada pelo carrossel mantém o mesmo identificador de receita e um único registro no histórico. A implementação deve preservar o foco e expor apenas uma versão acessível de cada card quando usar cópias para fechar o ciclo.
 
@@ -133,7 +133,7 @@ As referências abaixo servem como métodos de trabalho durante a etapa 11. Este
 | Abertura | Dar profundidade à composição editorial. | Uma entrada discreta do letreiro, coxinha e recortes pode ocorrer ao carregar. A flutuação 2D dos recortes é decorativa, sutil e não deve competir com o formulário. |
 | História | Relacionar a ilustração às fotografias. | Usar uma transição curta quando as imagens entrarem na leitura, preservando enquadramento e legibilidade sem depender de efeitos para contar a história. |
 | Montagem | Explicar a montagem e comunicar espera. | Repetir a sequência fixa durante o processamento; o estado textual real permanece presente. O fim da animação não declara que a receita terminou. |
-| Carrossel | Mostrar continuidade entre receitas. | A transição acompanha setas e deslize, pode ser interrompida por nova interação e não avança sozinha. Preservar posição, foco e identificador ao retornar da receita. |
+| Carrossel | Mostrar continuidade entre receitas. | A transição acompanha somente as setas, não muda com a rolagem vertical e não avança sozinha. Preservar posição, foco e identificador ao retornar da receita. |
 | Formulário e botões | Confirmar ações. | Foco sempre visível; resposta visual breve ao pressionar. Transições de controles não atrasam o envio nem escondem erros. |
 
 Preferir propriedades como transformação e opacidade para movimento, reaproveitando os mesmos tempos e curvas definidos no código. Não adicionar biblioteca de animação para um efeito que o CSS resolva. Interações frequentes devem responder imediatamente. Animações decorativas param ou são substituídas por uma apresentação estática quando a pessoa preferir movimento reduzido; ações e estados continuam compreensíveis sem movimento. [Princípios de animação](https://github.com/emilkowalski/skills/blob/main/skills/animate/SKILL.md)
@@ -150,7 +150,7 @@ Antes de encerrar a implementação de cada tela, verificar no navegador ao meno
 4. A montagem reutiliza a mesma sequência visual e termina de acordo com o estado da execução.
 5. O impasse consome a decisão na execução correta e deixa claras as ações disponíveis.
 6. A receita é legível com a imagem pronta, pendente ou indisponível. Uma referência simulada ou uma falha não é exibida como fotografia real. O carrossel mostra foto ou imagem provisória, título e subtítulo em cada card.
-7. O carrossel permite percorrer todas as receitas e retornar ao início, com setas, teclado e deslize. Verificar histórico vazio, uma receita e várias receitas, preservando o foco e o vínculo correto de cada card.
+7. O carrossel permite percorrer todas as receitas e retornar ao início pelas setas, sem avançar pela rolagem da página. Verificar histórico vazio, uma receita e várias receitas, preservando o foco e o vínculo correto de cada card.
 8. A moldura editorial da História mantém título, texto e fotos legíveis em desktop e celular.
 9. A interface funciona com teclado, foco visível, ampliação de texto e preferência por movimento reduzido. Cada estado tem um rótulo textual.
 10. O texto comum atende contraste mínimo de 4,5:1 e o texto grande, 3:1. [W3C, contraste mínimo](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
@@ -164,10 +164,10 @@ Esta especificação descreve a experiência e a direção visual. Os comportame
 
 | Região | Implementação visual | Ativos e limite |
 | --- | --- | --- |
-| Cabeçalho | Símbolo e assinatura Coxinh.IA à esquerda; Home, Suas receitas, História e ação de criar. | Referências `Coxinh.IA marca.png` e `Coxinh.IA  logo nome.png`. O arquivo original tem fundo incorporado; preparar uma versão com transparência real para uso sobre outra superfície. |
+| Cabeçalho | Assinatura Coxinh.IA acompanhada de “by” e do logotipo Deloitte em escala menor; Home, Suas receitas, História e ação de criar. | Usar `coxinh-logo-nome.png` e o recorte transparente `deloitte-cutout.png` dos ativos de produção do frontend. O logo Deloitte mantém contraste em uma pequena base branca. |
 | Abertura | Card de criação à esquerda; letreiro gigante atrás de uma coxinha aberta à direita. Profundidade por escala e sobreposição. | Usar uma fotografia de coxinha própria ou devidamente autorizada, separada das imagens geradas para as receitas. O recorte precisa ter bordas limpas e canal alfa. |
 | Elementos suspensos | Xícara, marca Deloitte, navio e símbolo Coxinh.IA em quatro posições distintas, afastados do formulário. | `cafe.jpg`, `deloitte.jpg`, `navio.png` e `Coxinh.IA marca.png` são referências em `docs/design/`. Converter em ativos de produção antes de exibir. Não usar quadriculado, fundo branco gravado ou marca d'água. Não redesenhar os logotipos. |
-| História | Moldura editorial, título de grande escala e sequência ilustração da turma → foto da turma. | `turma_ilustrada.png` e `turma_bootcamp.png`. A foto da dupla ainda depende de seleção; não inventar pessoas ou atribuições. |
+| História | Moldura editorial, título de grande escala e sequência ilustração da turma → foto da turma; foto de João e Caio abaixo dos nomes. | `turma_ilustrada.png`, `turma_bootcamp.png` e `dupla.png` em `frontend/public/assets/`. |
 | Receita | Imagem à esquerda no desktop e conteúdo à direita; no celular, título e subtítulo antes da imagem. | Imagem real vinda da API apenas se utilizável; estados simulados, pendentes e falhos recebem composição provisória com texto. |
 | Saúde | Bloco separado da receita com foto de um personagem fictício de médico, expressivo e claramente cenográfico. | A foto do personagem ainda não foi escolhida. A apresentação do aconselhamento deve funcionar sem ela e sem sugerir orientação de um profissional real. |
 
@@ -181,7 +181,7 @@ O Impasse mostra a crítica recebida, proposta quando existir, orientações e i
 
 A API fornece `/images/<arquivo>` ou null; o frontend valida nomes simples PNG/JPG/JPEG/WebP/SVG e compõe a URL com o endereço da API. O proxy local remove `/api`; imagens são globais, com fallback para simulação, recurso indisponível ou falha de carregamento.
 
-O histórico mostra resumos globais de resultados concluídos, começa pela receita mais recente na apresentação e mantém o mesmo ID de cada card ao navegar. O carrossel volta ao começo ou ao fim pelas setas e pelo deslize, sem duplicar registros ou controles acessíveis. A abertura de um card consulta `GET /recipes/{id}` e revela o resultado completo dessa execução. Voltar preserva a posição no carrossel.
+O histórico mostra resumos globais de resultados concluídos, começa pela receita mais recente na apresentação e mantém o mesmo ID de cada card ao navegar. O carrossel volta ao começo ou ao fim pelas setas, sem avançar pela rolagem vertical. A abertura de um card consulta `GET /recipes/{id}` e revela o resultado completo dessa execução. Voltar preserva a posição no carrossel.
 
 ### 12.3 Revisão com as referências de design
 

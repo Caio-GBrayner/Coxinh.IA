@@ -22,13 +22,15 @@ Texto editorial da etapa 11.0. Este arquivo é a referência para os textos escr
 
 **Continuação:** As duas brincadeiras se encontraram. Por que não criar um sistema capaz de inventar coxinhas com qualquer combinação que alguém imaginar? A ideia virou um jeito de praticar o que a dupla estudava no bootcamp da Deloitte e construir um projeto de verdade. Assim nasceu o Coxinh.IA.
 
-**Imagens na ordem editorial:** ilustração da turma em `docs/design/turma_ilustrada.png`; foto real correspondente em `docs/design/turma_bootcamp.png`; foto da dupla ainda pendente. As duas primeiras imagens mostram o mesmo grupo, com enquadramentos correspondentes.
+**Imagens na ordem editorial:** ilustração da turma em `docs/design/turma_ilustrada.png`; foto real correspondente em `docs/design/turma_bootcamp.png`; retrato da dupla em `docs/design/dupla.png`, abaixo de “João & Caio”. As duas primeiras imagens mostram o mesmo grupo, com enquadramentos correspondentes.
+
+**Legenda da foto da dupla:** Imagem criada por IA, a dupla ainda não tirou uma foto real...
 
 **Bloco da dupla:** A dupla por trás do Coxinh.IA
 
 **Texto da dupla:** João e Caio têm o hábito de perguntar se uma ideia daria um sistema de IA. A coxinha da padaria do Moinho deu. Juntos, transformaram a piada da turma em um projeto para experimentar, aprender e construir uma aplicação de verdade.
 
-O texto conta a origem informada por João. A referência ao bootcamp situa o encontro das ideias; ela não atribui à Deloitte a criação, o patrocínio ou a aprovação do Coxinh.IA. A dupla ainda revisará a redação e escolherá as fotos antes da publicação.
+O texto conta a origem informada por João. A referência ao bootcamp situa o encontro das ideias; ela não atribui à Deloitte a criação, o patrocínio ou a aprovação do Coxinh.IA. A dupla ainda revisará a redação antes da publicação.
 
 ## Montagem e Impasse
 

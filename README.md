@@ -111,7 +111,7 @@ print(result.get("final_response"))
 Na raiz do projeto, com as dependências Python instaladas e o `.env` configurado:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8080
+.\.venv\Scripts\python.exe -m uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8081
 ```
 
 Em outro terminal PowerShell, a partir da raiz (Node.js 24 foi usado na validação):
@@ -122,7 +122,7 @@ npm.cmd ci
 npm.cmd run dev -- --host 127.0.0.1
 ```
 
-Abra o endereço impresso pelo Vite, normalmente `http://127.0.0.1:5173`. O proxy `/api` remove esse prefixo e aponta para `127.0.0.1:8080`. Para outro host, configure `VITE_API_URL` antes do build e `CORS_ORIGINS` no backend. Use `npm.cmd` para evitar o bloqueio de `npm.ps1` pela política de execução do PowerShell. Chaves ficam somente no backend. A API web e o MCP HTTP separado não podem ocupar a mesma porta; o MCP no mesmo processo não exige outro servidor.
+Abra o endereço impresso pelo Vite, normalmente `http://127.0.0.1:5173`. O proxy `/api` remove esse prefixo e aponta para `127.0.0.1:8081`. Para outro host, configure `VITE_API_URL` antes do build e `CORS_ORIGINS` no backend. Use `npm.cmd` para evitar o bloqueio de `npm.ps1` pela política de execução do PowerShell. Chaves ficam somente no backend. A API web e o MCP HTTP separado não podem ocupar a mesma porta; o MCP no mesmo processo não exige outro servidor.
 
 Validação, a partir da raiz:
 
@@ -143,10 +143,10 @@ O [relatório da etapa 11](docs/design/review/etapa-11.md) reúne evidências, a
 A API HTTP é a porta de entrada do front. Por padrão (`PERSISTENCE=sqlite`), receitas, impasses em aberto e checkpoints ficam em `data/` e sobrevivem a reinícios.
 
 ```bash
-uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8080
+uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8081
 ```
 
-O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a API rodando, em `http://127.0.0.1:8080/docs`. Para subir front, API e MCP juntos, veja [Início rápido com Docker](#início-rápido-com-docker). Para testar o fluxo pelo terminal: `python -m src.app.main --livre` (ou `--demo-impasse`, sem LLM no Chef e no SubChef).
+O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a API rodando, em `http://127.0.0.1:8081/docs`. Para subir front, API e MCP juntos, veja [Início rápido com Docker](#início-rápido-com-docker) ou execute `docker compose up --build` para iniciar os serviços com volume persistente. Para testar o fluxo pelo terminal: `python -m src.app.main --livre` (ou `--demo-impasse`, sem LLM no Chef e no SubChef).
 
 
 ## Estrutura principal

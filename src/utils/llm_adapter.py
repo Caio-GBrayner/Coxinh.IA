@@ -3,6 +3,8 @@ from typing import Any
 
 from groq import BadRequestError
 from langchain_groq import ChatGroq
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from src.config import load_llm_config
 
@@ -12,8 +14,13 @@ logger = logging.getLogger(__name__)
 STRUCTURED_MAX_ATTEMPTS = 3
 
 
-def call_llm(temperature: float) -> ChatGroq:
+def call_llm(temperature: float) -> BaseChatModel:
     config = load_llm_config()
+    if config.provider == "google":
+        return ChatGoogleGenerativeAI(
+            api_key=config.api_key.get_secret_value(),
+            model=config.model,
+        )
 
     return ChatGroq(
         api_key=config.api_key,

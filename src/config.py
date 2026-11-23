@@ -9,6 +9,7 @@ class LLMConfig(BaseModel):
 
     api_key: SecretStr
     model: str
+    provider: str = "groq"
 
 
 class TavilyConfig(BaseModel):
@@ -22,11 +23,20 @@ def load_llm_config() -> LLMConfig:
 
     load_dotenv()
 
-    llm_key = os.getenv("LLM_KEY", "").strip()
+    llm_provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
     llm_model = os.getenv("LLM_MODEL", "").strip()
 
+    if llm_provider == "google":
+        key_variable = "GOOGLE_API_KEY"
+        llm_key = os.getenv(key_variable, "").strip()
+    elif llm_provider == "groq":
+        key_variable = "LLM_KEY"
+        llm_key = os.getenv(key_variable, "").strip()
+    else:
+        raise ValueError("LLM_PROVIDER must be 'google' or 'groq'.")
+
     if not llm_key:
-        raise ValueError("LLM_KEY must be set.")
+        raise ValueError(f"{key_variable} must be set.")
 
     if not llm_model:
         raise ValueError("LLM_MODEL must be set.")
@@ -34,6 +44,7 @@ def load_llm_config() -> LLMConfig:
     return LLMConfig(
         api_key=SecretStr(llm_key),
         model=llm_model,
+        provider=llm_provider,
     )
 
 
