@@ -2,12 +2,28 @@
 #
 # `api`: porta de entrada do front (FastAPI). Executa o grafo, guarda checkpoints,
 #        decisões do Impasse e receitas em SQLite e serve as imagens.
+# `front`: React compilado e servido pelo nginx em http://localhost:3000; repassa
+#          /api para a `api`, então o navegador fala com uma única origem.
 # `mcp`: ferramentas sem estado compartilhado (validação e imagem), chamadas pela
 #        `api` em http://mcp:8000/mcp. Grava as imagens no mesmo volume.
 #
 # O volume `coxinh-data` guarda bancos e imagens: parar e subir os containers não
 # perde receitas nem impasses em aberto.
 services:
+  front:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build: .
     command:

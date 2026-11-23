@@ -22,6 +22,54 @@ O Coxinh.IA transforma ingredientes e ideias improváveis em receitas de coxinha
 
 O fluxo está montado em [`src/graph/builder.py`](./src/graph/builder.py). [`RecipeSession`](./src/recipe_session.py) coordena cada execução e guarda receitas no armazenamento configurado (SQLite na API por padrão). Um novo pedido precisa de um novo `thread_id`; uma decisão de Impasse usa o identificador da execução pausada.
 
+## Início rápido com Docker
+
+O jeito mais simples de rodar o projeto completo. O Docker Compose sobe três serviços:
+
+| Serviço | Endereço | Função |
+| --- | --- | --- |
+| `front` | `http://127.0.0.1:3000` | Interface React servida pelo nginx. Repassa `/api` para a `api`. |
+| `api` | `http://127.0.0.1:8080` (documentação em `/docs`) | FastAPI com os agentes (Chef, SubChef, Cozinheiro, Saúde, Imagem) e a persistência em SQLite. |
+| `mcp` | só na rede interna (`mcp:8000`) | Ferramentas de validação e geração de imagem. |
+
+Os bancos SQLite e as imagens ficam no volume `coxinh-data`: derrubar e subir os containers não apaga receitas nem impasses em aberto.
+
+**1. Configure o `.env`.** Copie [`.env.example`](./.env.example) para `.env` na raiz e preencha:
+
+| Variável | Obrigatória | Uso |
+| --- | --- | --- |
+| `LLM_KEY`, `LLM_MODEL` | Sim | Chave e modelo do Groq (por exemplo `openai/gpt-oss-120b`). Modelos menores falham com mais frequência ao gerar a saída estruturada. |
+| `TAVILY_API_KEY` | Recomendada | Pesquisa do agente de saúde. Sem ela, o aconselhamento fica `unavailable`. |
+| `OPENROUTER_API_KEY` | Opcional | Imagem real. Sem ela, a imagem é simulada e não aparece no site. |
+| `LANGFUSE_*`, `LANGSMITH_*` | Opcional | Rastreamento. O host do Langfuse precisa ser o da região das chaves. |
+
+As variáveis de banco, MCP e imagens já vêm definidas no `compose.yaml`; não é preciso alterá-las para rodar no Docker.
+
+**2. Suba tudo:**
+
+```bash
+docker compose up --build -d
+docker compose ps
+```
+
+Abra `http://127.0.0.1:3000`. Criar uma receita chama o LLM e as demais APIs configuradas, e pode consumir cota ou gerar custo.
+
+**Comandos do dia a dia:**
+
+```bash
+docker compose up -d                 # sobe sem reconstruir
+docker compose up --build -d api     # reconstrói e sobe um serviço (api, mcp ou front)
+docker compose logs -f api           # acompanha os logs de um serviço
+docker compose down                  # derruba os containers e mantém os dados
+docker compose down && docker compose up -d   # aplica mudanças no .env
+```
+
+- **Mudou o `.env`?** Use `down` e `up -d`. O `docker compose restart` reinicia os containers sem reler o `.env`.
+- **`build` não sobe nada:** `docker compose build` só gera as imagens. Quem cria e liga os containers é o `up`.
+- **`docker compose down -v` apaga o volume** com todas as receitas, impasses e imagens. Use apenas para começar do zero.
+- **Teste de queda:** `docker compose kill api` seguido de `docker compose up -d api`. Um impasse em aberto continua disponível depois.
+- **Portas ocupadas:** 3000 e 8080 precisam estar livres no host.
+
 ## Instalar e testar
 
 Requer Python 3.11 ou superior. Os comandos abaixo são para PowerShell, executados na raiz do repositório:
@@ -98,7 +146,7 @@ A API HTTP é a porta de entrada do front. Por padrão (`PERSISTENCE=sqlite`), r
 uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8080
 ```
 
-O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a API rodando, em `http://127.0.0.1:8080/docs`. Para subir API e servidor MCP juntos, com volume persistente: `docker compose up --build`. Para testar o fluxo pelo terminal: `python -m src.app.main --livre` (ou `--demo-impasse`, sem LLM no Chef e no SubChef).
+O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a API rodando, em `http://127.0.0.1:8080/docs`. Para subir front, API e MCP juntos, veja [Início rápido com Docker](#início-rápido-com-docker). Para testar o fluxo pelo terminal: `python -m src.app.main --livre` (ou `--demo-impasse`, sem LLM no Chef e no SubChef).
 
 
 ## Estrutura principal
@@ -108,8 +156,12 @@ O contrato está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md) e, com a AP
 | `src/schemas.py`, `src/state.py` | Contratos da receita e estado compartilhado do grafo. |
 | `src/graph/nodes/`, `src/graph/builder.py` | Agentes, geração da imagem e rotas do fluxo. |
 | `src/graph/workflow.py`, `src/recipe_session.py` | Checkpoint, retomada do Impasse e carrossel global. |
+| `src/api/app.py` | API HTTP (FastAPI) usada pelo front. |
+| `src/persistence/` | SQLite para receitas, decisões do Impasse e checkpoints. |
 | `src/utils/web_search.py` | Adaptador de pesquisa Tavily usado pelo agente de saúde. |
-| `mcp_server/` | Ferramentas de validação, imagem simulada e interfaces opcionais de busca e Impasse. |
+| `mcp_server/` | Ferramentas de validação, imagem (OpenRouter ou simulada) e interfaces opcionais de busca e Impasse. |
+| `frontend/` | Interface React (Vite), com `Dockerfile` e `nginx.conf` para o compose. |
+| `compose.yaml`, `Dockerfile` | Serviços `front`, `api` e `mcp` e o volume de dados. |
 | `tests/` | Verificações automatizadas, sem necessidade de chamadas pagas. |
 | `docs/design/design.md` | Especificação visual da interface. |
 | `docs/plano_execucao_coxinh_ia.md` | Etapas, responsabilidades e critérios de conclusão. |
