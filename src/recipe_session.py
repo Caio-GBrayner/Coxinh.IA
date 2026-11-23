@@ -26,6 +26,14 @@ class RecipeSession:
         """Consulta o estado de um pedido da sessão."""
         return self._workflow.get_state(thread_id)
 
+    def is_recoverable(self, thread_id: str) -> bool:
+        """Diz se a conversa parou no meio e pode voltar ao Impasse."""
+        return self._workflow.is_recoverable(thread_id)
+
+    def recover(self, thread_id: str) -> WorkflowResult:
+        """Devolve ao Impasse uma conversa que parou no meio."""
+        return self._workflow.recover(thread_id)
+
     def decision_status(
         self,
         thread_id: str,

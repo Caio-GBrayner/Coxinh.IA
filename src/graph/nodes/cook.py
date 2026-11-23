@@ -26,8 +26,19 @@ def cook_node(state: RecipeState) -> dict[str, object]:
         ),
         ingredient_additions=state.get("ingredient_additions", []),
     )
-    if authorization.status == "rejected":
+    # Só recursos fora das listas autorizadas impedem o Cozinheiro. Itens salvos no
+    # Impasse que a proposta não usa são cobrados pelo SubChef na revisão; aqui a
+    # proposta já foi aprovada ou aceita como está pelo usuário, e barrar prenderia
+    # a conversa sem saída.
+    if (
+        authorization.unauthorized_ingredients
+        or authorization.unauthorized_utensils
+        or authorization.unauthorized_preparation_methods
+    ):
         raise ValueError("A proposta viola as autorizações do usuário.")
+    resource_status = (
+        "incomplete" if authorization.status == "rejected" else authorization.status
+    )
 
     approved_resources = {
         "ingredients": recipe.ingredients,
@@ -64,7 +75,7 @@ def cook_node(state: RecipeState) -> dict[str, object]:
                     for number, step in enumerate(output.steps, start=1)
                 ),
                 "image_prompt": output.image_prompt,
-                "cook_resource_validation": authorization.status,
+                "cook_resource_validation": resource_status,
             }
 
         context["resource_correction"] = (

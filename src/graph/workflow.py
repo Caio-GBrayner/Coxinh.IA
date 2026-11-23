@@ -12,6 +12,7 @@ from src.graph.builder import build_graph
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
+    ResumeLimitReached,
     StateVersionConflict,
     WorkflowNotPaused,
 )
@@ -26,6 +27,21 @@ from src.state import RecipeState
 
 WorkflowResult: TypeAlias = dict[str, Any]
 DecisionStatus: TypeAlias = Literal["new", "pending", "done"]
+
+# Ciclos de revisão por conversa (o primeiro mais as retomadas). Depois disso,
+# "resume" é recusado e restam aceitar, salvar ou encerrar: nunca há laço infinito.
+MAX_REVIEW_CYCLES = 4
+RECOVERY_MESSAGE = (
+    "A última tentativa não terminou por um erro técnico. "
+    "Você pode tentar de novo, aceitar a proposta atual ou encerrar."
+)
+FINISHED_STATUSES = ("completed", "cancelled")
+
+
+def resume_allowed(state: dict[str, Any]) -> bool:
+    """Diz se ainda cabe uma retomada nesta conversa."""
+    max_revisions = state.get("max_revisions") or 1
+    return (state.get("total_attempts") or 0) < max_revisions * MAX_REVIEW_CYCLES
 
 
 def project_serializer() -> JsonPlusSerializer:
@@ -129,11 +145,19 @@ class RecipeWorkflow:
                 raise KeyError(f"No workflow exists for thread_id '{thread_id}'.")
 
             current_state = snapshot.values
-            if (
+            continuing = (
                 current_state.get("status") == "in_revision"
                 and snapshot.next
                 and current_state.get("last_impasse_decision_key") == key
-            ):
+            )
+            if not continuing and self._stopped_after_decision(snapshot):
+                # Uma decisão anterior começou a rodar e falhou no meio. Em vez de
+                # recusar tudo, devolve a conversa ao Impasse e aplica esta decisão.
+                self._restore_pause(run_config)
+                snapshot = self._graph.get_state(run_config)
+                current_state = snapshot.values
+
+            if continuing:
                 # A decisão já entrou no checkpoint, mas a execução parou depois.
                 if current_state.get("last_impasse_decision_fingerprint") != fingerprint:
                     raise IdempotencyKeyReuse(
@@ -158,6 +182,11 @@ class RecipeWorkflow:
                         decision.expected_state_version,
                         current_version,
                     )
+                if decision.action == "resume" and not resume_allowed(current_state):
+                    raise ResumeLimitReached(
+                        "Limite de novas tentativas atingido. "
+                        "Aceite a proposta atual ou encerre a criação."
+                    )
                 self._claim(thread_id, decision, fingerprint, current_version)
                 graph_input = Command(resume=decision.model_dump())
 
@@ -179,6 +208,52 @@ class RecipeWorkflow:
                 result_copy,
             )
             return deepcopy(result_copy)
+
+    def is_recoverable(self, thread_id: str) -> bool:
+        """Diz se a conversa parou no meio depois de uma decisão e pode voltar ao Impasse."""
+        run_config = self._run_config(thread_id)
+        with self._thread_lock(thread_id):
+            snapshot = self._graph.get_state(run_config)
+            return bool(snapshot.values) and self._stopped_after_decision(snapshot)
+
+    def recover(self, thread_id: str) -> WorkflowResult:
+        """Devolve ao Impasse uma conversa que parou no meio; senão, só lê o estado."""
+        run_config = self._run_config(thread_id)
+        with self._thread_lock(thread_id):
+            snapshot = self._graph.get_state(run_config)
+            if not snapshot.values:
+                raise KeyError(f"No workflow exists for thread_id '{thread_id}'.")
+            if self._stopped_after_decision(snapshot):
+                self._restore_pause(run_config)
+                snapshot = self._graph.get_state(run_config)
+            return deepcopy(snapshot.values)
+
+    @staticmethod
+    def _stopped_after_decision(snapshot: Any) -> bool:
+        """Execução parada no meio (há próximo nó) depois de uma decisão do Impasse.
+
+        Quem chama segura a trava da thread, então nada está rodando agora: se há
+        um próximo nó pendente, a execução anterior foi interrompida por uma falha.
+        """
+        state = snapshot.values
+        return (
+            bool(snapshot.next)
+            and state.get("status") not in ("awaiting_user", *FINISHED_STATUSES)
+            and bool(state.get("last_impasse_decision_key"))
+        )
+
+    def _restore_pause(self, run_config: RunnableConfig) -> None:
+        """Volta ao nó do Impasse e roda até a pausa, preservando a versão do estado."""
+        self._graph.update_state(
+            run_config,
+            {
+                "status": "awaiting_user",
+                "user_action": "save",
+                "last_error": RECOVERY_MESSAGE,
+            },
+            as_node="impasse",
+        )
+        self._graph.invoke(None, config=run_config)
 
     def _claim(
         self,

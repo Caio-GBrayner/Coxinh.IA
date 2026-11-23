@@ -42,6 +42,8 @@ Resposta: `{"thread_id": "rcp-...", "status": "running"}`.
   "state_version": 0,
   "recipe": {"dough": "...", "filling": "...", "ingredients": ["..."], "preparation": "...", "utensils": [], "preparation_methods": []},
   "critique": "Crítica do SubChef quando a receita foi rejeitada, senão null",
+  "evidence": ["Itens adicionados no Impasse que a receita ainda não usa: queijo."],
+  "resume_allowed": true,
   "ingredient_additions": [],
   "user_guidance": null,
   "final_response": null,
@@ -62,7 +64,7 @@ Corpo igual ao `ImpasseDecision`:
 | `action` | `save`, `resume`, `accept` ou `cancel` | |
 | `expected_state_version` | inteiro ≥ 0 | O `state_version` lido em `GET /recipes/{thread_id}`. |
 | `idempotency_key` | texto não vazio | Gerada pelo front para cada decisão (por exemplo, um UUID). |
-| `ingredient_additions` | lista de textos | `save` exige este campo ou `user_guidance`; `accept` e `cancel` não aceitam. |
+| `ingredient_additions` | texto ou lista de textos | Aceita texto livre: vírgula, `;`, quebra de linha, "e" e marcadores de lista separam itens (`"queijo, carne e fogão"` vira três itens). `save` exige este campo ou `user_guidance`; `accept` e `cancel` não aceitam. |
 | `user_guidance` | texto ou `null` | Mesma regra. |
 
 | Ação | Resposta | O que acontece |
@@ -73,6 +75,12 @@ Corpo igual ao `ImpasseDecision`:
 | `accept` | 202, `running` | Aceita a receita rejeitada e segue para Cozinheiro, Saúde, Imagem e finalização. |
 
 Repetir a mesma decisão com a mesma chave devolve 200 com o estado atual, sem executar de novo, inclusive depois de a API reiniciar.
+
+**O Impasse não trava.** Se `resume` ou `accept` falhar no meio (erro do LLM ou de outro serviço), `GET /recipes/{thread_id}` volta a mostrar `awaiting_user`, com a explicação no começo de `critique` e o detalhe técnico em `error`. A próxima decisão, com uma chave nova e o `state_version` atual, é aplicada normalmente.
+
+**Itens adicionados são comparados com tolerância:** sem diferença de acento ou maiúsculas, aceitando nome parcial (`queijo` casa com `queijo ralado`) e em qualquer lista da receita (`fogão` pode estar em utensílios). Quando falta algum, `critique` e `evidence` dizem qual.
+
+**Limite de retomadas:** cada conversa tem até 4 ciclos de revisão. Depois disso `resume_allowed` fica `false` e `resume` responde 409 `resume_limit_reached`; `save`, `accept` e `cancel` continuam disponíveis.
 
 ### `GET /recipes` → 200
 
@@ -102,6 +110,7 @@ Formato: `{"detail": {"code": "...", "message": "..."}}`. Erros de validação d
 | 409 | `workflow_not_paused` | A receita não está em `awaiting_user`. |
 | 409 | `state_version_conflict` | `expected_state_version` diferente da versão atual. Releia o estado. |
 | 409 | `idempotency_key_reuse` | A mesma chave foi usada com outro conteúdo. |
+| 409 | `resume_limit_reached` | Acabaram as retomadas desta conversa. Aceite ou encerre. |
 | 422 | — | Corpo inválido (campo ausente, ação desconhecida, combinação proibida). |
 
 ## Configuração

@@ -30,11 +30,14 @@ from typing_extensions import Annotated
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
+    ResumeLimitReached,
     StateVersionConflict,
     WorkflowNotPaused,
 )
+from src.graph.workflow import RECOVERY_MESSAGE, resume_allowed
 from src.recipe_session import RecipeSession
 from src.state import create_initial_state
+from src.utils.ingredients import split_items
 
 
 logger = logging.getLogger(__name__)
@@ -107,18 +110,33 @@ def public_response(final_response: dict[str, Any] | None) -> dict[str, Any] | N
     return response
 
 
-def recipe_view(thread_id: str, state: dict[str, Any], api_status: str) -> dict[str, Any]:
+def recipe_view(
+    thread_id: str,
+    state: dict[str, Any],
+    api_status: str,
+    *,
+    notice: str | None = None,
+) -> dict[str, Any]:
+    """Estado público da receita.
+
+    `notice` explica uma falha técnica recuperada. Ele vai no começo da crítica,
+    que é o texto que a tela do Impasse já mostra.
+    """
     recipe = state.get("recipe")
     evaluation = state.get("subchef_evaluation")
+    rejected = evaluation is not None and getattr(evaluation, "decision", None) == "rejected"
+    critique = getattr(evaluation, "critique", None) if rejected else None
+    if notice:
+        critique = f"{notice} {critique}" if critique else notice
     return {
         "thread_id": thread_id,
         "status": api_status,
         "state_version": state.get("state_version"),
         "recipe": recipe.model_dump(mode="json") if hasattr(recipe, "model_dump") else recipe,
-        "critique": getattr(evaluation, "critique", None)
-        if evaluation is not None and getattr(evaluation, "decision", None) == "rejected"
-        else None,
-        "ingredient_additions": state.get("ingredient_additions", []),
+        "critique": critique,
+        "evidence": list(getattr(evaluation, "evidence", None) or []) if rejected else [],
+        "resume_allowed": resume_allowed(state),
+        "ingredient_additions": split_items(state.get("ingredient_additions", [])),
         "user_guidance": state.get("user_guidance"),
         "final_response": public_response(state.get("final_response")),
         "error": None,
@@ -189,15 +207,21 @@ def create_app(
             raise problem(404, "workflow_not_found", f"No recipe '{thread_id}'.") from None
 
         state_status = state.get("status")
-        if error is not None:
-            api_status = "error"
-        elif state_status in FINISHED_STATUSES:
+        notice = state.get("last_error")
+        if state_status in FINISHED_STATUSES:
             api_status = state_status
+        elif session.is_recoverable(thread_id):
+            # Uma decisão do Impasse falhou no meio: a próxima decisão devolve a
+            # conversa ao Impasse. Para o front, ela já está aguardando o usuário.
+            api_status = "awaiting_user"
+            notice = RECOVERY_MESSAGE
+        elif error is not None:
+            api_status = "error"
         else:
-            # Execução parada no meio (por exemplo, o processo caiu).
+            # Execução parada no meio antes de qualquer Impasse (por exemplo, queda).
             api_status = "interrupted"
-        view = recipe_view(thread_id, state, api_status)
-        view["error"] = error
+        view = recipe_view(thread_id, state, api_status, notice=notice)
+        view["error"] = error if api_status in ("error", "awaiting_user") else None
         return view
 
     @app.get("/health")
@@ -251,14 +275,21 @@ def create_app(
 
         continuing = state.get("last_impasse_decision_key") == decision.idempotency_key
         if not continuing:
-            if state.get("status") != "awaiting_user":
-                raise problem(409, "workflow_not_paused", "The recipe is not waiting for a decision.")
+            paused = state.get("status") == "awaiting_user" or session.is_recoverable(thread_id)
+            if not paused:
+                raise problem(409, "workflow_not_paused", "A receita não está aguardando uma decisão.")
             if decision.expected_state_version != state.get("state_version"):
                 raise problem(
                     409,
                     "state_version_conflict",
-                    f"Expected version {decision.expected_state_version}, "
-                    f"current is {state.get('state_version')}.",
+                    "A receita foi atualizada em outro momento. Confira a versão atual "
+                    f"(esperada {decision.expected_state_version}, atual {state.get('state_version')}).",
+                )
+            if decision.action == "resume" and not resume_allowed(state):
+                raise problem(
+                    409,
+                    "resume_limit_reached",
+                    "Limite de novas tentativas atingido. Aceite a proposta atual ou encerre a criação.",
                 )
 
         if decision.action in ("save", "cancel"):
@@ -270,6 +301,8 @@ def create_app(
                 raise problem(409, "workflow_not_paused", str(exc)) from exc
             except IdempotencyKeyReuse as exc:
                 raise problem(409, "idempotency_key_reuse", str(exc)) from exc
+            except ResumeLimitReached as exc:
+                raise problem(409, "resume_limit_reached", str(exc)) from exc
             return JSONResponse(current_view(thread_id), status_code=200)
 
         if not registry.try_start(thread_id):
