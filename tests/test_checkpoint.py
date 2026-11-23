@@ -285,3 +285,38 @@ def test_start_rejects_reuse_of_existing_thread_id(monkeypatch):
 
     with pytest.raises(ValueError, match="already exists"):
         workflow.start(initial_state)
+
+def test_accept_sends_the_rejected_proposal_to_cook_and_completes(monkeypatch):
+    """Verifica que aceitar no Impasse segue para o Cozinheiro e finaliza."""
+    workflow, calls = create_in_memory_workflow(
+        monkeypatch, ["rejected", "rejected"]
+    )
+    paused = workflow.start(
+        create_initial_state("Make a coxinha.", "thread-1", max_revisions=2)
+    )
+    assert paused["status"] == "awaiting_user"
+
+    result = workflow.submit_impasse_decision(
+        "thread-1",
+        create_decision(
+            "accept",
+            expected_state_version=0,
+            idempotency_key="accept-1",
+        ),
+    )
+
+    assert result["status"] == "completed"
+    assert result["user_action"] == "accept"
+    assert result["final_response"]["recipe"]["title"]
+    assert calls == {"chef": 2, "subchef": 2}
+
+
+def test_accept_cannot_carry_workflow_updates():
+    """Verifica que aceitar não aceita ingredientes nem orientação."""
+    with pytest.raises(ValueError, match="accept action cannot include"):
+        create_decision(
+            "accept",
+            expected_state_version=0,
+            idempotency_key="accept-1",
+            user_guidance="Add salt.",
+        )

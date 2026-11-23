@@ -28,7 +28,7 @@ class RecipeState(TypedDict, total=False):
 
     ingredient_additions: Required[list[str]]
     user_guidance: Required[str | None]
-    user_action: Required[Literal["save", "resume", "cancel"] | None]
+    user_action: Required[Literal["save", "resume", "accept", "cancel"] | None]
 
     recipe: Recipe
     subchef_evaluation: SubChefEvaluation
