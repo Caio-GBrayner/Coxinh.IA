@@ -1,17 +1,64 @@
-# Serviços do Coxinh.IA. Contrato em docs/CONTRATO_MCP.md.
+# Serviços do Coxinh.IA. Contratos em docs/CONTRATO_API.md e docs/CONTRATO_MCP.md.
 #
-# `mcp` expõe as ferramentas sem estado compartilhado por streamable HTTP.
-# O serviço `app` (interface Streamlit) entra na etapa 11 e chamará o `mcp` em
-# http://mcp:8000/mcp, definido em MCP_SERVER_URL.
+# `api`: porta de entrada do front (FastAPI). Executa o grafo, guarda checkpoints,
+#        decisões do Impasse e receitas em SQLite e serve as imagens.
+# `mcp`: ferramentas sem estado compartilhado (validação e imagem), chamadas pela
+#        `api` em http://mcp:8000/mcp. Grava as imagens no mesmo volume.
+#
+# O volume `coxinh-data` guarda bancos e imagens: parar e subir os containers não
+# perde receitas nem impasses em aberto.
 services:
+  api:
+    build: .
+    command:
+      - uvicorn
+      - src.api.app:create_app
+      - --factory
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MCP_SERVER_URL: "http://mcp:8000/mcp"
+      PERSISTENCE: "sqlite"
+      DATABASE_PATH: "/app/data/coxinh.db"
+      CHECKPOINT_DATABASE_PATH: "/app/data/checkpoints.db"
+      IMAGE_STORAGE_DIR: "/app/data/images"
+    ports:
+      - "8080:8080"
+    volumes:
+      - coxinh-data:/app/data
+    depends_on:
+      mcp:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   mcp:
     build: .
     command: ["python", "-m", "mcp_server.server"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
+      IMAGE_STORAGE_DIR: "/app/data/images"
     expose:
       - "8000"
+    volumes:
+      - coxinh-data:/app/data
     healthcheck:
       test:
         - CMD
@@ -22,3 +69,6 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+
+volumes:
+  coxinh-data:

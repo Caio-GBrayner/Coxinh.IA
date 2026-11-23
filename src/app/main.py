@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from src.graph import builder as graph_builder
 from src.graph.impasse import ImpasseDecision
 from src.schemas import Recipe, SubChefEvaluation
+from src.persistence.factory import build_session
 from src.recipe_session import RecipeSession
 from src.state import create_initial_state
 
@@ -333,7 +334,7 @@ def main() -> None:
         install_impasse_demo()
         args.livre = True
         print("MODO DEMO: Chef e SubChef falsos. Qualquer pedido gera impasse.\n")
-    session = RecipeSession()
+    session = build_session()  # PERSISTENCE=sqlite (padrão) guarda o histórico em data/
     print(__doc__)
 
     while True:
