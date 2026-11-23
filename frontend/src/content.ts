@@ -30,7 +30,7 @@ export const copy = {
     impasse: "Precisamos da sua decisão para continuar.",
     guidance: "O que você quer ajustar?",
     additions: "Adicionar ingrediente",
-    additionsHelp: "Um ingrediente por linha.",
+    additionsHelp: "Separe os ingredientes por vírgula ou por linha.",
     save: "Salvar orientação",
     resume: "Continuar criação",
     accept: "Aceitar receita como está",
@@ -71,6 +71,8 @@ export const copy = {
     },
     conflict:
         "Essa receita foi atualizada em outro momento. Confira a versão atual antes de continuar.",
+    resumeLimit:
+        "Limite de novas tentativas atingido. Aceite a proposta atual ou encerre a criação.",
     failure:
         "Não foi possível confirmar a operação. Consulte o estado antes de decidir o próximo passo.",
     unknownCreation:

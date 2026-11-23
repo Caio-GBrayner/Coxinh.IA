@@ -21,6 +21,8 @@ export function Impasse({
     const [ingredients, setIngredients] = useState("");
     const [error, setError] = useState("");
     const dirty = !!(guidance.trim() || ingredients.trim());
+    // A API informa quando acabaram as retomadas; versões antigas não enviam o campo.
+    const canResume = active.resume_allowed !== false;
     async function act(action: DecisionRequest["action"]) {
         const additions = ingredients
             .split("\n")
@@ -102,13 +104,19 @@ export function Impasse({
                             {error}
                         </p>
                     )}
+                    {!canResume && (
+                        <p id="resume-limit" className="hint">
+                            {copy.resumeLimit}
+                        </p>
+                    )}
                     <div className="decision-actions">
                         <button className="primary" disabled={busy || blocked}>
                             {copy.save}
                         </button>
                         <button
                             type="button"
-                            disabled={busy || blocked}
+                            disabled={busy || blocked || !canResume}
+                            aria-describedby={canResume ? undefined : "resume-limit"}
                             onClick={() => void act("resume")}
                         >
                             {copy.resume}
