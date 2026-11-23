@@ -121,7 +121,8 @@ def test_image_request_is_faithful_to_the_recipe_and_not_a_real_photo():
     assert "Recheio: Chicken" in request
     assert "potato, chicken" in request
     assert "boiling, frying" in request
-    assert "fotografia de um alimento real" in request
+    assert "coxinha fictícia" in request
+    assert "fotografia realista" in request
 
 
 def test_generate_then_reuse_calls_the_provider_once():

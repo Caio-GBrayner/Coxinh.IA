@@ -9,7 +9,7 @@ from src.graph.resource_validation import (
 )
 from src.schemas import Recipe, SubChefEvaluation
 from src.state import RecipeState
-from src.utils.llm_adapter import call_llm
+from src.utils.llm_adapter import call_llm, invoke_structured
 
 
 class SubChefInput(BaseModel):
@@ -86,8 +86,9 @@ def subchef_node(state: RecipeState) -> dict[str, Any]:
         SUBCHEF_TEMPERATURE
     ).with_structured_output(SubChefEvaluation)
     evaluation = SubChefEvaluation.model_validate(
-        structured_model.invoke(
-            {"context": context.model_dump_json(exclude_none=True)}
+        invoke_structured(
+            structured_model,
+            {"context": context.model_dump_json(exclude_none=True)},
         )
     )
 

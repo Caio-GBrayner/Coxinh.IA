@@ -151,7 +151,7 @@ def _register_impasse(mcp: FastMCP, session: RecipeSession) -> None:
     )
     async def record(
         thread_id: str,
-        action: Literal["save", "resume", "cancel"],
+        action: Literal["save", "resume", "accept", "cancel"],
         expected_state_version: int,
         idempotency_key: str,
         ingredient_additions: list[str] | None = None,
@@ -236,7 +236,9 @@ def build_default_server() -> FastMCP:
 
     A busca web entra aqui quando a etapa 9 for integrada.
     """
-    return create_server(image_service=ImageService(SimulatedImageProvider()))
+    from mcp_server.openrouter import build_image_provider_from_env
+
+    return create_server(image_service=ImageService(build_image_provider_from_env()))
 
 
 def main() -> None:

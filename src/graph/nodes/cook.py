@@ -4,7 +4,7 @@ from src.graph.prompts.cook import COOK_PROMPT
 from src.graph.resource_validation import validate_recipe_resources
 from src.schemas import CookOutput, Recipe
 from src.state import RecipeState
-from src.utils.llm_adapter import call_llm
+from src.utils.llm_adapter import call_llm, invoke_structured
 
 
 COOK_TEMPERATURE = 0.4
@@ -41,7 +41,9 @@ def cook_node(state: RecipeState) -> dict[str, object]:
 
     for _ in range(COOK_MAX_ATTEMPTS):
         output = CookOutput.model_validate(
-            chain.invoke({"context": json.dumps(context, ensure_ascii=False)})
+            invoke_structured(
+                chain, {"context": json.dumps(context, ensure_ascii=False)}
+            )
         )
         declared_resources = {
             "ingredients": output.ingredients,

@@ -5,9 +5,11 @@ from typing import Any, TypeAlias
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Command
 
 from src.graph.builder import build_graph
+from src.observability import langfuse_callbacks
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
@@ -20,6 +22,16 @@ from src.state import RecipeState
 WorkflowResult: TypeAlias = dict[str, Any]
 
 
+def _project_serializer() -> JsonPlusSerializer:
+    """Autoriza no checkpoint os modelos do projeto, evitando o aviso do LangGraph."""
+    return JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("src.schemas", "Recipe"),
+            ("src.schemas", "SubChefEvaluation"),
+        ]
+    )
+
+
 class InMemoryWorkflow:
     def __init__(
         self,
@@ -27,9 +39,12 @@ class InMemoryWorkflow:
         checkpointer: BaseCheckpointSaver | None = None,
     ) -> None:
         self._checkpointer = (
-            MemorySaver() if checkpointer is None else checkpointer
+            MemorySaver(serde=_project_serializer())
+            if checkpointer is None
+            else checkpointer
         )
         self._graph = build_graph(checkpointer=self._checkpointer)
+        self._callbacks = langfuse_callbacks()
         self._thread_locks: dict[str, Lock] = {}
         self._thread_locks_guard = Lock()
         self._processed_decisions: dict[
@@ -123,8 +138,10 @@ class InMemoryWorkflow:
                 self._thread_locks[thread_id] = Lock()
             return self._thread_locks[thread_id]
 
-    @staticmethod
-    def _run_config(thread_id: str) -> RunnableConfig:
+    def _run_config(self, thread_id: str) -> RunnableConfig:
         if not isinstance(thread_id, str) or not thread_id.strip():
             raise ValueError("thread_id must not be empty.")
-        return {"configurable": {"thread_id": thread_id}}
+        return {
+            "configurable": {"thread_id": thread_id},
+            "callbacks": self._callbacks,
+        }
