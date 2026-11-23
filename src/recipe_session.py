@@ -1,5 +1,5 @@
 from src.graph.impasse import ImpasseDecision
-from src.graph.workflow import InMemoryWorkflow, WorkflowResult
+from src.graph.workflow import DecisionStatus, RecipeWorkflow, WorkflowResult
 from src.recipe_history import SessionRecipeHistory
 from src.state import RecipeState
 
@@ -7,10 +7,15 @@ from src.state import RecipeState
 class RecipeSession:
     """Coordena as execuções e o histórico de uma sessão."""
 
-    def __init__(self) -> None:
-        """Cria o workflow e o histórico que a sessão vai reutilizar."""
-        self._workflow = InMemoryWorkflow()
-        self.history = SessionRecipeHistory()
+    def __init__(
+        self,
+        *,
+        workflow: RecipeWorkflow | None = None,
+        history: SessionRecipeHistory | None = None,
+    ) -> None:
+        """Usa o workflow e o histórico dados, ou cria versões em memória."""
+        self._workflow = RecipeWorkflow() if workflow is None else workflow
+        self.history = SessionRecipeHistory() if history is None else history
 
     def start(self, initial_state: RecipeState) -> WorkflowResult:
         """Inicia um pedido e salva a receita se ele for concluído."""
@@ -20,6 +25,14 @@ class RecipeSession:
     def get_state(self, thread_id: str) -> WorkflowResult:
         """Consulta o estado de um pedido da sessão."""
         return self._workflow.get_state(thread_id)
+
+    def decision_status(
+        self,
+        thread_id: str,
+        decision: ImpasseDecision,
+    ) -> DecisionStatus:
+        """Diz se a decisão é nova, está em andamento ou já foi aplicada."""
+        return self._workflow.decision_status(thread_id, decision)
 
     def submit_impasse_decision(
         self,

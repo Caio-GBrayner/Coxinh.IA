@@ -1,6 +1,6 @@
 from copy import deepcopy
 from threading import Lock
-from typing import Any, TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -9,20 +9,26 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Command
 
 from src.graph.builder import build_graph
-from src.observability import langfuse_callbacks
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
     StateVersionConflict,
     WorkflowNotPaused,
 )
+from src.observability import langfuse_callbacks
+from src.persistence.decision_store import (
+    DecisionStore,
+    InMemoryDecisionStore,
+    VersionAlreadyClaimed,
+)
 from src.state import RecipeState
 
 
 WorkflowResult: TypeAlias = dict[str, Any]
+DecisionStatus: TypeAlias = Literal["new", "pending", "done"]
 
 
-def _project_serializer() -> JsonPlusSerializer:
+def project_serializer() -> JsonPlusSerializer:
     """Autoriza no checkpoint os modelos do projeto, evitando o aviso do LangGraph."""
     return JsonPlusSerializer(
         allowed_msgpack_modules=[
@@ -32,24 +38,39 @@ def _project_serializer() -> JsonPlusSerializer:
     )
 
 
-class InMemoryWorkflow:
+# Nome antigo, mantido para quem já importava a função privada.
+_project_serializer = project_serializer
+
+
+class RecipeWorkflow:
+    """Executa o grafo com checkpointer e registro de decisões injetáveis.
+
+    Sem argumentos, tudo fica em memória (testes e modo sem persistência). Com
+    um checkpointer SQLite e um `SqliteDecisionStore`, a execução sobrevive a
+    reinícios: um impasse continua pausado e pode ser decidido depois.
+    As travas por `thread_id` são locais ao processo; a aplicação roda em um
+    único processo (decisão D4) e a unicidade de versão no banco é a garantia
+    final contra duas decisões para a mesma versão.
+    """
+
     def __init__(
         self,
         *,
         checkpointer: BaseCheckpointSaver | None = None,
+        decision_store: DecisionStore | None = None,
     ) -> None:
         self._checkpointer = (
-            MemorySaver(serde=_project_serializer())
+            MemorySaver(serde=project_serializer())
             if checkpointer is None
             else checkpointer
+        )
+        self._decisions = (
+            InMemoryDecisionStore() if decision_store is None else decision_store
         )
         self._graph = build_graph(checkpointer=self._checkpointer)
         self._callbacks = langfuse_callbacks()
         self._thread_locks: dict[str, Lock] = {}
         self._thread_locks_guard = Lock()
-        self._processed_decisions: dict[
-            tuple[str, str], tuple[str, WorkflowResult]
-        ] = {}
 
     def start(self, initial_state: RecipeState) -> WorkflowResult:
         thread_id = initial_state["thread_id"]
@@ -68,6 +89,21 @@ class InMemoryWorkflow:
                 raise KeyError(f"No workflow exists for thread_id '{thread_id}'.")
             return deepcopy(snapshot.values)
 
+    def decision_status(
+        self,
+        thread_id: str,
+        decision: ImpasseDecision,
+    ) -> DecisionStatus:
+        """Diz se a decisão é nova, está em andamento ou já foi aplicada."""
+        stored = self._decisions.get(thread_id, decision.idempotency_key)
+        if stored is None:
+            return "new"
+        if stored.fingerprint != _fingerprint(decision):
+            raise IdempotencyKeyReuse(
+                "An idempotency key cannot be reused for a different decision."
+            )
+        return "done" if stored.completed else "pending"
+
     def submit_impasse_decision(
         self,
         thread_id: str,
@@ -75,18 +111,18 @@ class InMemoryWorkflow:
     ) -> WorkflowResult:
         """Aplica a decisão ou continua uma retomada já registrada no checkpoint."""
         run_config = self._run_config(thread_id)
-        fingerprint = decision.model_dump_json(exclude={"idempotency_key"})
-        idempotency_key = (thread_id, decision.idempotency_key)
+        fingerprint = _fingerprint(decision)
+        key = decision.idempotency_key
 
         with self._thread_lock(thread_id):
-            processed = self._processed_decisions.get(idempotency_key)
-            if processed is not None:
-                previous_fingerprint, previous_result = processed
-                if previous_fingerprint != fingerprint:
+            stored = self._decisions.get(thread_id, key)
+            if stored is not None:
+                if stored.fingerprint != fingerprint:
                     raise IdempotencyKeyReuse(
                         "An idempotency key cannot be reused for a different decision."
                     )
-                return deepcopy(previous_result)
+                if stored.completed:
+                    return deepcopy(stored.result)
 
             snapshot = self._graph.get_state(run_config)
             if not snapshot.values:
@@ -96,9 +132,9 @@ class InMemoryWorkflow:
             if (
                 current_state.get("status") == "in_revision"
                 and snapshot.next
-                and current_state.get("last_impasse_decision_key")
-                == decision.idempotency_key
+                and current_state.get("last_impasse_decision_key") == key
             ):
+                # A decisão já entrou no checkpoint, mas a execução parou depois.
                 if current_state.get("last_impasse_decision_fingerprint") != fingerprint:
                     raise IdempotencyKeyReuse(
                         "An idempotency key cannot be reused for a different decision."
@@ -122,15 +158,51 @@ class InMemoryWorkflow:
                         decision.expected_state_version,
                         current_version,
                     )
+                self._claim(thread_id, decision, fingerprint, current_version)
                 graph_input = Command(resume=decision.model_dump())
 
-            result = self._graph.invoke(graph_input, config=run_config)
+            try:
+                result = self._graph.invoke(graph_input, config=run_config)
+            except BaseException:
+                # Sem reserva pendente, a mesma chave pode tentar de novo; se a
+                # decisão já entrou no checkpoint, a retentativa segue o caminho
+                # de continuação acima.
+                self._decisions.release(thread_id, key)
+                raise
+
             result_copy = deepcopy(result)
-            self._processed_decisions[idempotency_key] = (
+            self._decisions.complete(
+                thread_id,
+                key,
+                decision.expected_state_version,
                 fingerprint,
                 result_copy,
             )
-            return result_copy
+            return deepcopy(result_copy)
+
+    def _claim(
+        self,
+        thread_id: str,
+        decision: ImpasseDecision,
+        fingerprint: str,
+        current_version: int,
+    ) -> None:
+        """Reserva a versão no registro; substitui uma reserva órfã de uma queda."""
+        try:
+            self._decisions.claim(
+                thread_id, decision.idempotency_key, current_version, fingerprint
+            )
+        except VersionAlreadyClaimed as exc:
+            if exc.existing.completed:
+                raise StateVersionConflict(
+                    decision.expected_state_version, current_version + 1
+                ) from exc
+            # Reserva pendente com o estado ainda nesta versão: sobrou de uma
+            # execução interrompida, pois este processo detém a trava da thread.
+            self._decisions.release(thread_id, exc.existing.idempotency_key)
+            self._decisions.claim(
+                thread_id, decision.idempotency_key, current_version, fingerprint
+            )
 
     def _thread_lock(self, thread_id: str) -> Lock:
         with self._thread_locks_guard:
@@ -145,3 +217,11 @@ class InMemoryWorkflow:
             "configurable": {"thread_id": thread_id},
             "callbacks": self._callbacks,
         }
+
+
+# Nome antigo, mantido porque testes e módulos ainda o importam.
+InMemoryWorkflow = RecipeWorkflow
+
+
+def _fingerprint(decision: ImpasseDecision) -> str:
+    return decision.model_dump_json(exclude={"idempotency_key"})
