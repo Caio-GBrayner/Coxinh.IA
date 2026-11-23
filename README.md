@@ -38,7 +38,8 @@ Os bancos SQLite e as imagens ficam no volume `coxinh-data`: derrubar e subir os
 
 | Variável | Obrigatória | Uso |
 | --- | --- | --- |
-| `LLM_KEY`, `LLM_MODEL` | Sim | Chave e modelo do Groq (por exemplo `openai/gpt-oss-120b`). Modelos menores falham com mais frequência ao gerar a saída estruturada. |
+| `LLM_PROVIDER`, `LLM_MODEL` | Sim | `google` ou `groq` (padrão `groq`), e o modelo do provedor, por exemplo `gemini-3.5-flash-lite` ou `openai/gpt-oss-120b`. Modelos menores falham com mais frequência ao gerar a saída estruturada. |
+| `GOOGLE_API_KEY` ou `LLM_KEY` | Sim | A chave do provedor escolhido: `GOOGLE_API_KEY` para `google`, `LLM_KEY` para `groq`. |
 | `TAVILY_API_KEY` | Recomendada | Pesquisa do agente de saúde. Sem ela, o aconselhamento fica `unavailable`. |
 | `OPENROUTER_API_KEY` | Opcional | Imagem real. Sem ela, a imagem é simulada e não aparece no site. |
 | `LANGFUSE_*`, `LANGSMITH_*` | Opcional | Rastreamento. O host do Langfuse precisa ser o da região das chaves. |
@@ -69,6 +70,171 @@ docker compose down && docker compose up -d   # aplica mudanças no .env
 - **`docker compose down -v` apaga o volume** com todas as receitas, impasses e imagens. Use apenas para começar do zero.
 - **Teste de queda:** `docker compose kill api` seguido de `docker compose up -d api`. Um impasse em aberto continua disponível depois.
 - **Portas ocupadas:** 3000 e 8080 precisam estar livres no host.
+
+## Exemplo de fluxo
+
+```mermaid
+flowchart TD
+    P[Pedido] --> C[Chef]
+    C --> S[SubChef]
+    S -->|aprovada| K[Cozinheiro]
+    S -->|rejeitada, ainda há revisões| C
+    S -->|rejeitada, sem revisões| I{Impasse}
+    I -->|save: guarda ajustes| I
+    I -->|resume: tenta de novo| C
+    I -->|accept: aceita como está| K
+    I -->|cancel| X[Encerrada]
+    K --> H[Saúde] --> M[Imagem] --> F[Finalização]
+```
+
+Uma execução que passa pelo Impasse (exemplo ilustrativo; o conteúdo varia a cada execução porque os agentes usam um modelo de linguagem):
+
+| Passo | O que acontece | `status` | `state_version` |
+| --- | --- | --- | --- |
+| 1 | Pedido: "Tenho um sapato velho, um cadarço, meio saco de cimento e um cabo USB. Quero fritar na panela." | `running` | 0 |
+| 2 | O Chef propõe massa de cimento e recheio de sapato e cadarço. | `running` | 0 |
+| 3 | O SubChef rejeita: o recheio não tem nenhum ingrediente com caloria. O Chef tenta de novo e é rejeitado outra vez (2 de 2 revisões). | `awaiting_user` | 0 |
+| 4 | Impasse. A pessoa envia `save` com `queijo e carne`. Nada roda, a conversa continua pausada. | `awaiting_user` | 1 |
+| 5 | A pessoa envia `resume`. O Chef usa o queijo e a carne no recheio e o SubChef aprova. | `running` | 2 |
+| 6 | Cozinheiro (título, subtítulo, passos), Saúde (aviso com fontes), Imagem e Finalização. | `completed` | 2 |
+
+Em qualquer ponto do passo 4, `accept` leva direto ao Cozinheiro com a proposta rejeitada, e `cancel` encerra sem receita.
+
+## Testar o Impasse e a aplicação
+
+O Impasse é a parte que depende de uma decisão humana e a mais difícil de provocar de propósito. Os modelos de linguagem variam entre execuções: se um pedido não cair no Impasse, rode de novo.
+
+### Pedidos para experimentar
+
+| Pedido | O que esperar |
+| --- | --- |
+| `Tenho frango, queijo e mandioca. Quero fritar na panela.` | Normalmente aprovado sem Impasse, com receita, aviso de saúde e imagem. |
+| `Tenho um sapato velho, um cadarço, meio saco de cimento e um cabo USB. Quero fritar na panela.` | Cai no Impasse: o recheio não tem ingrediente com caloria. |
+| `Tenho uma pastilha de urânio, um tijolo e uma bateria. Quero assar no forno.` | Pode virar receita fictícia, cair no Impasse ou, mais raramente, ser recusado pelo modelo. Nesse último caso o sistema repete a chamada até 3 vezes (Groq) e, se falhar, mostra o erro sem travar. |
+| Pedido vazio ou só com espaços | A tela pede uma ideia; a API responde 422. |
+| Pedido com mais de 4000 caracteres | A API responde 422. |
+
+### Ingredientes no Impasse
+
+O campo "Adicionar ingrediente" aceita texto livre. Vírgula, `;`, quebra de linha, "e" e marcadores de lista separam os itens.
+
+| Digite | Resultado |
+| --- | --- |
+| `queijo, carne e fogão` | Três itens: `queijo`, `carne`, `fogão`. |
+| `- queijo`, `* carne moída` e `2. massa de mandioca` em linhas separadas | Três itens, sem os marcadores. |
+| `PÃO francês; Manteiga` | Dois itens. A comparação ignora acento e maiúsculas, então `pão francês` na receita conta. |
+| ` , ; ` | Recusado: "Informe pelo menos um ingrediente ou uma orientação." Nada quebra. |
+| `trufa` (a receita não usa) | Volta ao Impasse com o motivo em português: "Itens adicionados no Impasse que a receita ainda não usa: trufa." |
+| `fogão` | Conta mesmo que a receita o use só como utensílio. |
+
+### O que verificar
+
+- **Aceitar sempre funciona:** `accept` conclui a receita mesmo com itens salvos que ela não usa.
+- **Limite de retomadas:** depois de 4 ciclos de revisão, `resume` é recusado (409 `resume_limit_reached`) e o botão "Continuar criação" fica desativado. Salvar, aceitar e cancelar continuam disponíveis.
+- **Falha no meio:** se uma retomada falhar por erro técnico (por exemplo, limite de uso do modelo), a tela volta ao Impasse com um aviso e a próxima decisão funciona.
+- **Queda do servidor:** derrube a API no meio de um Impasse (`docker compose kill api`), suba de novo (`docker compose up -d api`) e confirme que o Impasse continua disponível.
+
+### Impasse sem modelo de linguagem
+
+Para exercitar as quatro ações sem custo e de forma repetível, use o modo de demonstração no terminal. O Chef e o SubChef são substituídos por versões fixas que sempre geram Impasse:
+
+```bash
+python -m src.app.main --demo-impasse
+```
+
+No Impasse, `a` aceita, `s` salva ingredientes e orientação, `r` retoma e `c` cancela.
+
+### Testes automáticos
+
+```bash
+python -m pytest -q                                  # toda a suíte, sem chamadas externas
+python -m pytest -q tests/test_impasse_recovery.py   # texto livre, falhas e limite de retomadas
+python -m pytest -q tests/test_crash_recovery.py     # derruba a API com SIGKILL no meio do Impasse
+```
+
+### Decidir o Impasse pela API
+
+```bash
+curl -X POST http://127.0.0.1:8080/recipes/<thread_id>/impasse \
+  -H 'Content-Type: application/json' \
+  -d '{"action": "save", "expected_state_version": 0, "idempotency_key": "salvar-1", "ingredient_additions": "queijo, carne e fogão"}'
+```
+
+Use o `state_version` atual de `GET /recipes/<thread_id>` e uma `idempotency_key` nova a cada decisão. O contrato completo está em [`docs/CONTRATO_API.md`](./docs/CONTRATO_API.md).
+
+## Testar no LangGraph Studio com LangSmith
+
+O Studio mostra cada nó do grafo, o estado em cada passo e permite retomar o Impasse à mão. Ele usa o grafo de [`src/graph/studio.py`](./src/graph/studio.py), registrado em [`langgraph.json`](./langgraph.json), com a mesma lógica da aplicação e uma entrada reduzida.
+
+```bash
+python -m pip install "langgraph-cli[inmem]"
+langgraph dev --no-browser --no-reload --port 2024
+```
+
+O endereço do Studio aparece no log do servidor. Para ver os rastros no LangSmith, defina no `.env` `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY` e `LANGSMITH_PROJECT`. Use `--no-reload`: sem ele, o servidor reinicia sem parar por causa dos arquivos do ambiente virtual. O Studio guarda as execuções localmente, na pasta `.langgraph_api/` (ignorada pelo Git), e não no SQLite da aplicação.
+
+**1. Entrada.** Cole este JSON como entrada do grafo `coxinha`:
+
+```json
+{
+  "raw_input": "Tenho um sapato velho, um cadarço, meio saco de cimento e um cabo USB. Quero fritar na panela.",
+  "thread_id": "teste-1"
+}
+```
+
+**2. Impasse.** Quando o fluxo pausar, o Studio mostra uma interrupção com a receita, a crítica e o `state_version`. O Studio só aceita JSON válido como resposta: texto solto como `aceitar` gera `JSON.parse: unexpected non-whitespace character`. Cada decisão tem estes campos:
+
+| Campo | Regra |
+| --- | --- |
+| `action` | `save`, `resume`, `accept` ou `cancel`. |
+| `expected_state_version` | O `state_version` mostrado na interrupção. Em um Impasse novo é `0`. |
+| `idempotency_key` | Obrigatório: qualquer texto não vazio. Use um valor diferente a cada decisão. No Studio a chave não é conferida; na API, reutilizá-la com outro conteúdo é rejeitado. |
+| `ingredient_additions` | Texto livre ou lista. Só para `save` e `resume`. |
+| `user_guidance` | Texto livre. Só para `save` e `resume`. |
+
+Salvar ingredientes e orientação (continua pausado; o `state_version` sobe para `1`):
+
+```json
+{
+  "action": "save",
+  "expected_state_version": 0,
+  "idempotency_key": "salvar-1",
+  "ingredient_additions": "queijo, carne e fogão",
+  "user_guidance": "Use o queijo e a carne como recheio."
+}
+```
+
+Retomar, para o Chef tentar de novo com o que foi salvo. Use o `state_version` novo:
+
+```json
+{
+  "action": "resume",
+  "expected_state_version": 1,
+  "idempotency_key": "retomar-1"
+}
+```
+
+Aceitar a proposta como está, seguindo para Cozinheiro, Saúde, Imagem e finalização:
+
+```json
+{
+  "action": "accept",
+  "expected_state_version": 0,
+  "idempotency_key": "aceitar-1"
+}
+```
+
+Encerrar sem receita:
+
+```json
+{
+  "action": "cancel",
+  "expected_state_version": 0,
+  "idempotency_key": "cancelar-1"
+}
+```
+
+`accept` e `cancel` não aceitam `ingredient_additions` nem `user_guidance`. Se o Studio responder `State version conflict: expected 0, current version is 1`, a decisão anterior já foi aplicada: use o `state_version` mostrado agora.
 
 ## Instalar e testar
 
