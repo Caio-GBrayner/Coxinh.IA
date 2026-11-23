@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from src.graph.prompts.chef import CHEF_PROMPT
 from src.schemas import NonEmptyText, Recipe, SubChefEvaluation
 from src.state import RecipeState
+from src.utils.ingredients import split_items
 from src.utils.llm_adapter import call_llm, invoke_structured
 
 
@@ -46,7 +47,7 @@ def chef_node(state: RecipeState) -> dict[str, object]:
         authorized_preparation_methods=state.get(
             "authorized_preparation_methods"
         ),
-        ingredient_additions=state.get("ingredient_additions", []),
+        ingredient_additions=split_items(state.get("ingredient_additions", [])),
         user_guidance=state.get("user_guidance"),
         previous_recipe=previous_recipe,
         previous_critique=(
