@@ -10,8 +10,16 @@ from src.graph.nodes import cook, health
 
 
 @pytest.fixture(autouse=True)
-def isolate_tool_client():
-    """Dá a cada teste um servidor MCP novo, para o índice de imagens não vazar."""
+def isolate_tool_client(monkeypatch):
+    """Dá a cada teste um servidor MCP novo, para o índice de imagens não vazar.
+
+    Define MCP_SERVER_URL vazia: sem isso, os testes usariam um servidor
+    externo (do .env) com índice próprio, e a imagem voltaria como `reused`.
+    Vazia e não removida, porque load_dotenv() recarregaria o valor do .env.
+    """
+    monkeypatch.setenv("MCP_SERVER_URL", "")
+    # Sem chave, o servidor padrão usa o provedor simulado: nenhum teste gera custo.
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
     mcp_client.reset_default_client()
     yield
     mcp_client.reset_default_client()
