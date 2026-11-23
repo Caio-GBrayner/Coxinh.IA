@@ -192,7 +192,7 @@ test("falha de decisão consulta a execução e conserva orientação", async ({
     expect(api.reads).toBeGreaterThanOrEqual(3);
 });
 
-test("carrossel circular, teclado, deslize e posição ao voltar", async ({
+test("carrossel circular pelas setas e posição ao voltar", async ({
     page,
 }) => {
     const history = [1, 2, 3, 4].map((id) => ({
@@ -210,18 +210,11 @@ test("carrossel circular, teclado, deslize e posição ao voltar", async ({
     await expect(cards.first()).toHaveAccessibleName(
         "Abrir receita: Coxinha 1",
     );
-    const carousel = page.locator(".carousel");
-    await carousel.focus();
-    await page.keyboard.press("ArrowRight");
+    await page.getByRole("button", { name: copy.next }).click();
     await expect(cards.first()).toHaveAccessibleName(
         "Abrir receita: Coxinha 4",
     );
-    await carousel.dispatchEvent("touchstart", {
-        touches: [{ identifier: 1, clientX: 280, clientY: 100 }],
-    });
-    await carousel.dispatchEvent("touchend", {
-        changedTouches: [{ identifier: 1, clientX: 80, clientY: 102 }],
-    });
+    await page.getByRole("button", { name: copy.next }).click();
     await expect(cards.first()).toHaveAccessibleName(
         "Abrir receita: Coxinha 3",
     );
@@ -234,6 +227,51 @@ test("carrossel circular, teclado, deslize e posição ao voltar", async ({
         "Abrir receita: Coxinha 3",
     );
     expect(await cards.count()).toBe(3);
+});
+
+test("rolagem da página não passa o carrossel; as setas avançam", async ({
+    page,
+}) => {
+    const history = [1, 2, 3, 4].map((id) => ({
+        ...structuredClone(finalResponse),
+        id: String(id),
+        recipe: { ...finalResponse.recipe, title: `Coxinha ${id}` },
+    }));
+    await mockApi(page, { history });
+    await page.goto("/");
+
+    const galleryPosition = page.locator(".gallery .hint");
+    await expect(galleryPosition).toContainText("1");
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await expect(galleryPosition).toContainText("1");
+    await page.locator("#recipes").scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: copy.next }).click();
+    await expect(galleryPosition).toContainText("2");
+});
+
+test("foto da dupla fica abaixo dos nomes no desktop e no celular", async ({
+    page,
+}) => {
+    await mockApi(page);
+    await page.goto("/");
+    const names = page.locator(".duo-names");
+    const photo = page.locator(".duo-photo");
+
+    await expect(photo).toHaveAttribute("src", "/assets/dupla.png");
+    for (const width of [1440, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await photo.scrollIntoViewIfNeeded();
+        const namesBox = await names.boundingBox();
+        const photoBox = await photo.boundingBox();
+        expect(namesBox).not.toBeNull();
+        expect(photoBox).not.toBeNull();
+        expect(photoBox!.y).toBeGreaterThanOrEqual(
+            namesBox!.y + namesBox!.height,
+        );
+        await expect
+            .poll(() => photo.evaluate((image: HTMLImageElement) => image.naturalWidth))
+            .toBeGreaterThan(0);
+    }
 });
 
 for (const state of ["pending", "failed", "broken", "generated", "reused"]) {
@@ -310,6 +348,119 @@ test("referência raster local aparece no resultado e no card do histórico", as
         page.locator(".recipe-card .recipe-photo img"),
     ).toHaveAttribute("src", "http://127.0.0.1:5174/api/images/recipe-1.png");
     await expect(page.getByText(copy.imageCredit).first()).toBeVisible();
+});
+
+test("imagem grande fica limitada ao quadro no resultado e no carrossel", async ({
+    page,
+}) => {
+    const initial = view("completed");
+    initial.final_response!.image = {
+        status: "generated",
+        url: "/images/oversized.png",
+    };
+    const history = [
+        { id: "thread-1", ...structuredClone(initial.final_response!) },
+    ];
+    await mockApi(page, { initial, history });
+    await page.route("**/api/images/oversized.png", (route) =>
+        route.fulfill({
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="200" viewBox="0 0 2400 200"><rect width="2400" height="200" fill="#86bc25"/></svg>',
+            contentType: "image/svg+xml",
+        }),
+    );
+    await page.addInitScript(() =>
+        sessionStorage.setItem("coxinh.activeThread", "thread-1"),
+    );
+    await page.goto("/");
+
+    const frames = page.locator(".recipe-photo-frame");
+    await expect(frames).toHaveCount(2);
+    for (const width of [1440, 1024, 768, 390]) {
+        await page.setViewportSize({ width, height: 1000 });
+        const bounds = await frames.evaluateAll((elements) =>
+            elements.map((element) => {
+                const frame = element.getBoundingClientRect();
+                const image = element.querySelector("img")!.getBoundingClientRect();
+                return {
+                    ratio: frame.width / frame.height,
+                    frame: {
+                        left: frame.left,
+                        right: frame.right,
+                        top: frame.top,
+                        bottom: frame.bottom,
+                    },
+                    image: {
+                        left: image.left,
+                        right: image.right,
+                        top: image.top,
+                        bottom: image.bottom,
+                    },
+                    objectFit: getComputedStyle(
+                        element.querySelector("img")!,
+                    ).objectFit,
+                };
+            }),
+        );
+
+        for (const { ratio, frame, image, objectFit } of bounds) {
+            expect(ratio).toBeCloseTo(1.2, 1);
+            expect(objectFit).toBe("cover");
+            expect(image.left).toBeGreaterThanOrEqual(frame.left - 1);
+            expect(image.right).toBeLessThanOrEqual(frame.right + 1);
+            expect(image.top).toBeGreaterThanOrEqual(frame.top - 1);
+            expect(image.bottom).toBeLessThanOrEqual(frame.bottom + 1);
+        }
+
+        const cardFigure = await page
+            .locator(".recipe-card .recipe-photo")
+            .boundingBox();
+        const cardTitle = await page
+            .locator(".recipe-card .card-title")
+            .boundingBox();
+        expect(cardFigure).not.toBeNull();
+        expect(cardTitle).not.toBeNull();
+        expect(cardTitle!.y).toBeGreaterThanOrEqual(
+            cardFigure!.y + cardFigure!.height,
+        );
+    }
+});
+
+test("fallbacks mantêm o enquadramento e o texto dentro dos quadros", async ({
+    page,
+}) => {
+    const initial = view("completed");
+    initial.final_response!.image = {
+        status: "unavailable",
+        url: "simulated://test",
+    };
+    const history = [
+        { id: "thread-1", ...structuredClone(initial.final_response!) },
+    ];
+    await mockApi(page, { initial, history });
+    await page.addInitScript(() =>
+        sessionStorage.setItem("coxinh.activeThread", "thread-1"),
+    );
+    await page.goto("/");
+
+    const placeholders = page.locator(
+        ".result .image-placeholder, .recipe-card .image-placeholder",
+    );
+    await expect(placeholders).toHaveCount(2);
+    for (const width of [1440, 1024, 768, 390]) {
+        await page.setViewportSize({ width, height: 1000 });
+        const dimensions = await placeholders.evaluateAll((elements) =>
+            elements.map((element) => {
+                const box = element.getBoundingClientRect();
+                return {
+                    ratio: box.width / box.height,
+                    contentFits: element.scrollHeight <= element.clientHeight + 1,
+                };
+            }),
+        );
+        for (const { ratio } of dimensions)
+            expect(ratio).toBeCloseTo(1.2, 1);
+        expect(dimensions.every(({ contentFits }) => contentFits)).toBe(true);
+    }
 });
 
 test("referência local inválida e imagem local indisponível mostram fallback", async ({

@@ -22,6 +22,8 @@ export const copy = {
     illustration: "Ilustração da turma do bootcamp",
     group: "Fotografia da turma do bootcamp",
     duoPending: "João & Caio",
+    duoPhotoCaption:
+        "Imagem criada por IA, a dupla ainda não tirou uma foto real...",
     processing: "Criando receita",
     atmosphere: "Calma, estamos montando a coxinha.",
     impasseLabel: "Impasse",

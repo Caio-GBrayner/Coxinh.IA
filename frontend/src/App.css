@@ -8,6 +8,12 @@
     gap: 2rem;
     border-bottom: 1px solid #303030;
 }
+.brand-lockup {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.65rem;
+}
 .brand {
     position: relative;
     flex-shrink: 0;
@@ -31,6 +37,25 @@
     left: -23.5%;
     top: 50%;
     transform: translateY(-50%);
+}
+.brand-by {
+    color: #bcbcbc;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+.brand-deloitte-frame {
+    display: flex;
+    align-items: center;
+    width: 82px;
+    height: 26px;
+    padding: 4px 6px;
+    border-radius: 2px;
+    background: #fff;
+}
+.brand-deloitte {
+    display: block;
+    width: 100%;
+    height: auto;
 }
 .site-header nav {
     display: flex;
@@ -336,6 +361,23 @@
 .duo-names {
     font-size: clamp(2.5rem, 4vw, 4rem);
     text-wrap: balance;
+    margin: 0 0 1.25rem;
+}
+.duo-photo {
+    display: block;
+    width: 100%;
+    max-width: 520px;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 8px;
+}
+.duo-photo-caption {
+    width: 100%;
+    max-width: 520px;
+    margin: 0.65rem 0 0;
+    color: #555;
+    font-size: 0.875rem;
+    line-height: 1.5;
 }
 .duo h2 {
     font-size: clamp(1.75rem, 2.8vw, 2.75rem);
@@ -367,7 +409,6 @@
     gap: 1.5rem;
     overflow: hidden;
     padding: 1rem 5px;
-    touch-action: pan-y;
 }
 .recipe-card {
     flex: 0 0 calc((100% - 3rem) / 3);
@@ -380,14 +421,12 @@
     font-weight: 400;
     background: transparent;
 }
-.recipe-card .image-placeholder,
-.recipe-card .recipe-photo {
-    aspect-ratio: 1.2;
-    min-height: 240px;
-    height: auto;
-}
 .recipe-card .image-placeholder img {
     height: 60px;
+}
+.recipe-card .image-placeholder {
+    gap: 0.75rem;
+    padding: 1rem;
 }
 .recipe-card .image-placeholder p {
     font-size: 1.3rem;
@@ -562,15 +601,27 @@
     gap: 4rem;
     align-items: start;
 }
-.recipe-photo img,
+.recipe-photo-frame,
 .image-placeholder {
+    width: 100%;
+    aspect-ratio: 1.2;
     border-radius: 24px;
     overflow: hidden;
 }
-.recipe-photo img {
+.recipe-photo {
     width: 100%;
-    aspect-ratio: 1;
+    min-width: 0;
+    margin: 0;
+}
+.recipe-photo-frame {
+    background: #151515;
+}
+.recipe-photo-frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
+    object-position: center;
 }
 .recipe-photo figcaption {
     padding: 0.75rem 0;
@@ -579,24 +630,24 @@
 .image-placeholder {
     background: #151515;
     color: #fff;
-    min-height: 420px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1.5rem;
+    gap: clamp(0.75rem, 1.5vw, 1.5rem);
     text-align: center;
-    padding: 2rem;
+    padding: clamp(1rem, 2vw, 2rem);
 }
 .image-placeholder img {
-    height: 110px;
+    height: clamp(64px, 8vw, 110px);
     width: auto;
 }
 .image-placeholder p {
     font-family: var(--heading);
-    font-size: 2.5rem;
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
     line-height: 1.1;
-    max-width: 13ch;
+    max-width: 15ch;
 }
 .image-placeholder small {
     color: #bcbcbc;
@@ -825,7 +876,22 @@ body {
         gap: 2rem;
     }
     .image-placeholder {
-        min-height: 320px;
+        min-height: 0;
+        gap: 1rem;
+        padding: 1.5rem;
+    }
+    .image-placeholder img {
+        height: 90px;
+    }
+    .image-placeholder p {
+        font-size: clamp(1.5rem, 6vw, 2rem);
+        max-width: 17ch;
+    }
+    .recipe-card .image-placeholder img {
+        height: 56px;
+    }
+    .recipe-card .image-placeholder p {
+        font-size: 1.25rem;
     }
     .result-title {
         margin-bottom: 2rem;
@@ -836,9 +902,20 @@ body {
     }
 }
 @media (max-width: 500px) {
+    .brand-lockup {
+        gap: 0.4rem;
+    }
     .brand {
         width: 160px;
         height: 36px;
+    }
+    .brand-by {
+        font-size: 0.65rem;
+    }
+    .brand-deloitte-frame {
+        width: 66px;
+        height: 22px;
+        padding: 4px;
     }
     .header-create {
         font-size: 0.875rem;
@@ -926,7 +1003,6 @@ body {
         width: 100%;
     }
 }
-
 @media (prefers-reduced-motion: reduce) {
     .motion-toggle {
         display: none;

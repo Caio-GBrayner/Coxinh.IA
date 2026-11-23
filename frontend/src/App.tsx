@@ -68,9 +68,22 @@ function App() {
                 {copy.skip}
             </a>
             <header className="site-header">
-                <a className="brand" href="#home">
-                    <img src="/assets/coxinh-logo-nome.png" alt={copy.brand} />
-                </a>
+                <div className="brand-lockup">
+                    <a className="brand" href="#home">
+                        <img
+                            src="/assets/coxinh-logo-nome.png"
+                            alt={copy.brand}
+                        />
+                    </a>
+                    <span className="brand-by">by</span>
+                    <span className="brand-deloitte-frame">
+                        <img
+                            className="brand-deloitte"
+                            src="/assets/deloitte-cutout.png"
+                            alt="Deloitte"
+                        />
+                    </span>
+                </div>
                 <nav aria-label={copy.navigation}>
                     <a href="#home">{copy.home}</a>
                     <a href="#story">{copy.story}</a>
@@ -300,7 +313,18 @@ function App() {
                     </div>
                     <ClassPhotoReveal />
                     <div className="duo">
-                        <p className="duo-names">{copy.duoPending}</p>
+                        <div className="duo-portrait">
+                            <p className="duo-names">{copy.duoPending}</p>
+                            <img
+                                className="duo-photo"
+                                src="/assets/dupla.png"
+                                alt="João e Caio juntos"
+                                loading="lazy"
+                            />
+                            <p className="duo-photo-caption">
+                                {copy.duoPhotoCaption}
+                            </p>
+                        </div>
                         <div>
                             <h2>{copy.duoTitle}</h2>
                             <p>{copy.duoBody}</p>

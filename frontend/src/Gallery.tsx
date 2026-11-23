@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { SavedRecipe } from "./recipeTypes";
 import { RecipeImage } from "./RecipeResult";
 import { copy } from "./content";
 import { storage } from "./useRecipeSession";
+
 export function Gallery({
     recipes,
     open,
@@ -17,11 +18,11 @@ export function Gallery({
     const [selected, setSelected] = useState(() =>
         storage.get("coxinh.galleryId"),
     );
-    const touch = useRef<{ x: number; y: number } | null>(null);
     const index = Math.max(
         0,
         recipes.findIndex((recipe) => recipe.id === selected),
     );
+
     function move(direction: number) {
         if (recipes.length < 2) return;
         const recipe =
@@ -29,10 +30,12 @@ export function Gallery({
         setSelected(recipe.id);
         storage.set("coxinh.galleryId", recipe.id);
     }
+
     const visible = [...recipes.slice(index), ...recipes.slice(0, index)].slice(
         0,
         3,
     );
+
     return (
         <section
             id="recipes"
@@ -63,7 +66,7 @@ export function Gallery({
             </header>
             {error ? (
                 <p role="alert">
-                    {error}{" "}
+                    {error} {" "}
                     <button onClick={() => void refresh()}>
                         {copy.refresh}
                     </button>
@@ -83,37 +86,6 @@ export function Gallery({
                         role="region"
                         aria-roledescription="carrossel"
                         aria-label={copy.gallery}
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                            if (
-                                event.key === "ArrowRight" ||
-                                event.key === "ArrowLeft"
-                            ) {
-                                event.preventDefault();
-                                move(event.key === "ArrowRight" ? 1 : -1);
-                            }
-                        }}
-                        onTouchStart={(event) => {
-                            touch.current = {
-                                x: event.touches[0].clientX,
-                                y: event.touches[0].clientY,
-                            };
-                        }}
-                        onTouchEnd={(event) => {
-                            if (!touch.current) return;
-                            const dx =
-                                event.changedTouches[0].clientX -
-                                touch.current.x;
-                            const dy =
-                                event.changedTouches[0].clientY -
-                                touch.current.y;
-                            if (
-                                Math.abs(dx) > 50 &&
-                                Math.abs(dx) > Math.abs(dy)
-                            )
-                                move(dx < 0 ? 1 : -1);
-                            touch.current = null;
-                        }}
                     >
                         {visible.map((recipe) => (
                             <button

@@ -36,7 +36,7 @@ O carrossel global, aprovado por João, usa `{ "items": [...] }` na ordem recebi
 | `frontend/src/Impasse.tsx` | `Impasse`: botão de aceite do stash, disponível somente com proposta; campos opcionais seguros. |
 | `frontend/src/RecipeResult.tsx` | `RecipeImage`: URL baseada na API, validação de caminho e fallback; fontes mantêm validação independente. |
 | `frontend/src/content.ts` | `copy`: carrossel global, indisponibilidade e interrupção, sem prometer isolamento por sessão. |
-| `frontend/vite.config.ts` | `server.proxy`: destino padrão 8080, remove /api; testes usam 8001. |
+| `frontend/vite.config.ts` | `server.proxy`: destino padrão 8081, remove /api; testes usam 8001. |
 | `frontend/README.md` | Execução, proxy e `VITE_API_URL` para API em outro host, com CORS no backend. |
 | `frontend/tests/fixtures.ts` | `mockApi`: respostas 202, polling, impasse, resumos globais e detalhes separados. |
 | `frontend/tests/flows.spec.ts` | Contrato assíncrono, aceite sem rascunhos, versões, erros, imagens, recuperação e API real com dois navegadores. |

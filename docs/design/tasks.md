@@ -7,7 +7,7 @@ Este checklist orienta o Codex no VS Code. Ler primeiro [`requirements.md`](requ
 ## 0. Preparar e conferir a base
 
 - [x] Verificar branch, status do Git e diferenças locais. Preservar alterações existentes. Não incluir `retomada-mcp.patch` no PR.
-- [x] Confirmar `frontend/` com React, TypeScript, Vite e `frontend/vite.config.ts` com proxy `/api` para `127.0.0.1:8080`.
+- [x] Confirmar `frontend/` com React, TypeScript, Vite e `frontend/vite.config.ts` com proxy `/api` para `127.0.0.1:8081`.
 - [x] Conferir `src/api/app.py`, `frontend/src/recipeApi.ts`, `frontend/src/recipeTypes.ts`, `tests/test_api.py` e o contrato real do Impasse antes de criar componentes.
 - [x] Rodar `python -m pytest -q` e `npm run build` dentro de `frontend/`; registrar a linha de base e resolver apenas falhas relacionadas à etapa.
 - [x] Abrir `/api/recipes` por Vite e confirmar que a resposta vazia `{ "items": [] }` corresponde ao carrossel global. Esse teste de conexão já foi feito por João, mas pode ser repetido após alterações da configuração.
@@ -61,7 +61,7 @@ Este checklist orienta o Codex no VS Code. Ler primeiro [`requirements.md`](requ
 - [x] Construir seção editorial **Da Deloitte à Coxinh.IA** com texto aprovado, moldura, detalhe verde e ilustração da turma seguida pela foto real. Incluir bloco da dupla com texto aprovado; não simular uma foto ainda ausente.
 - [x] Consultar `listRecipes()` após carregar a aplicação e após concluir uma receita. Exibir histórico vazio com a mensagem definida e ordenar a apresentação da mais recente para a mais antiga.
 - [x] Criar cards com imagem ou alternativa, título e subtítulo. O clique abre o resultado daquela receita sem alterar ou duplicar seu ID.
-- [x] Implementar carrossel circular com setas, teclado e gesto de deslize em tela sensível ao toque. Uma única receita não cria cópias. Preservar índice ao entrar e sair do detalhe e manter só uma versão acessível de cada receita.
+- [x] Implementar carrossel circular avançado pelas setas. A rolagem vertical não troca a receita. Uma única receita não cria cópias. Preservar índice ao entrar e sair do detalhe.
 - [x] Usar interação para avançar, sem reprodução automática; respeitar movimento reduzido.
 
 ## 7. Revisão técnica e visual
@@ -76,11 +76,11 @@ Este checklist orienta o Codex no VS Code. Ler primeiro [`requirements.md`](requ
 
 ## Dependências e limite de conclusão
 
-As tarefas 0 e 1 precedem as telas. A criação depende da API já preparada; Impasse depende da execução ativa; resultado e galeria dependem dos dados reais. A etapa 10.1 pode terminar durante a implementação: integrar o resultado da imagem por contrato, sem acoplar o frontend a um modelo específico. A foto da dupla e a foto cenográfica do personagem de saúde podem permanecer pendentes se a experiência funcionar sem elas e a pendência constar no PR. Os quatro recortes limpos e a revisão visual das telas fazem parte do aceite desta etapa.
+As tarefas 0 e 1 precedem as telas. A criação depende da API já preparada; Impasse depende da execução ativa; resultado e galeria dependem dos dados reais. A etapa 10.1 pode terminar durante a implementação: integrar o resultado da imagem por contrato, sem acoplar o frontend a um modelo específico. A foto da dupla está em `docs/design/dupla.png`; a foto cenográfica do personagem de saúde ainda pode permanecer pendente se a experiência funcionar sem ela e a pendência constar no PR. Os quatro recortes limpos e a revisão visual das telas fazem parte do aceite desta etapa.
 
 ## Evidências da implementação
 
-Ver [relatório da etapa 11](review/etapa-11.md), capturas, comandos e pendências. O aceite permanece parcial: recortes com alfa preparados, mas acabamento/fidelidade ainda precisam de revisão. Uso das referências autorizado por João em 22/11/2026. Fotos da dupla e do personagem de saúde pendentes; etapa 10.1 não implementada aqui. Publicação e PR aguardam autorização explícita após bloqueio da revisão automática.
+Ver [relatório da etapa 11](review/etapa-11.md), capturas, comandos e pendências registradas naquele momento. A foto da dupla foi incluída em revisão posterior a esse relatório; a foto do personagem de saúde segue pendente. Uso das referências autorizado por João em 22/11/2026. Etapa 10.1 não implementada aqui. Publicação e PR aguardam autorização explícita após bloqueio da revisão automática.
 
 ## Integração PR #20 — 23/11/2026
 

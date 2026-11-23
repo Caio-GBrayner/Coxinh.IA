@@ -36,8 +36,11 @@ COOK_PROMPT = ChatPromptTemplate.from_messages(
             "Descreva a coxinha pronta para a geração da imagem como uma fotografia "
             "realista de comida, com luz natural e textura real: nunca desenho, "
             "ilustração, cartoon, pintura ou arte digital, mesmo que a receita seja "
-            "absurda. O absurdo está nos ingredientes, não no estilo. Descreva a coxinha pronta para a geração da imagem, incluindo formato, sempre a coxinha deve ser represnetad um fhcada e outra cortada no meio para ser possivel ver o recheio "
-            "textura e recheio visível, de acordo com a receita aprovada. "
+            "absurda. O absurdo está nos ingredientes, não no estilo. Represente "
+            "uma coxinha fechada e outra cortada ao meio para mostrar o recheio. "
+            "Mantenha o formato tradicional de coxinha, a menos que o usuário "
+            "especifique outro formato. Descreva a textura e o recheio visível, "
+            "de acordo com a receita aprovada. "
             "Retorne apenas os campos definidos no modelo de saída.",
         ),
         ("human", "{context}"),
