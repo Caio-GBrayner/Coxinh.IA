@@ -86,7 +86,6 @@ def validate_recipe_resources(
     # Tolerante de propósito: um item pedido no Impasse conta como usado se aparecer
     # em qualquer lista da receita, sem depender de acento, maiúsculas ou do nome
     # completo ("pao" casa com "pão francês"; "fogão" pode estar em utensílios).
-    # Uma regra rígida aqui prendia a conversa no Impasse sem saída.
     used_resources = [
         *recipe.ingredients,
         *recipe.utensils,
