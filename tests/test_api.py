@@ -262,3 +262,46 @@ def test_cors_allows_the_configured_front_origin(client):
         },
     )
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_browsers_share_global_history(client):
+    """A cobertura de dois navegadores agora verifica o carrossel global aprovado."""
+    thread_id = start_paused(client)
+    assert client.get('/recipes').json() == {'items': []}
+    decide(client, thread_id, 'accept', 0, 'global-accept')
+    with TestClient(client.app) as second:
+        assert second.get('/recipes').json()['items'][0]['id'] == thread_id
+        assert second.get(f'/recipes/{thread_id}').json()['status'] == 'completed'
+
+
+def test_save_does_not_run_agents_and_stale_resume_preserves_state(client, calls):
+    thread_id = start_paused(client)
+    before = dict(calls)
+    saved = decide(client, thread_id, 'save', 0, 'save-check', ingredient_additions=['queijo'])
+    assert saved.json()['state_version'] == 1
+    assert calls == before
+    stale = decide(client, thread_id, 'resume', 0, 'stale-resume')
+    assert stale.status_code == 409
+    assert client.get(f'/recipes/{thread_id}').json() == saved.json()
+    assert calls == before
+
+
+def test_accept_preserves_pipeline_without_rerunning_review(client, calls):
+    thread_id = start_paused(client)
+    before = dict(calls)
+    assert decide(client, thread_id, 'accept', 0, 'accept-pipeline').status_code == 202
+    final = client.get(f'/recipes/{thread_id}').json()['final_response']
+    assert final['health']
+    assert final['image']
+    assert calls['chef'] == before['chef']
+    assert calls['subchef'] == before['subchef']
+
+
+def test_local_image_endpoint_rejects_symlink_outside_storage(client, tmp_path):
+    outside = tmp_path.parent / 'outside.png'
+    outside.write_bytes(b'outside')
+    try:
+        (tmp_path / 'linked.png').symlink_to(outside)
+    except OSError:
+        pytest.skip('Symlink creation unavailable on this account.')
+    assert client.get('/images/linked.png').status_code == 404
