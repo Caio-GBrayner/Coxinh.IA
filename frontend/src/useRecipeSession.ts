@@ -171,11 +171,14 @@ export function useRecipeSession() {
             const restored = await restore(active.thread_id);
             if (restored)
                 setMessage(
-                    error instanceof RecipeApiError && error.status === 409
-                        ? copy.conflict
-                        : error instanceof RecipeApiError
-                          ? error.message
-                          : copy.failure,
+                    error instanceof RecipeApiError &&
+                        error.code === "resume_limit_reached"
+                        ? copy.resumeLimit
+                        : error instanceof RecipeApiError && error.status === 409
+                          ? copy.conflict
+                          : error instanceof RecipeApiError
+                            ? error.message
+                            : copy.failure,
                 );
             return false;
         } finally {

@@ -11,6 +11,8 @@ export interface RecipeView {
         | "error";
     state_version?: number;
     critique?: string | null;
+    /** Falso quando a conversa esgotou as retomadas: restam aceitar ou encerrar. */
+    resume_allowed?: boolean;
     recipe?: ProposedRecipe | null;
     ingredient_additions?: string[];
     user_guidance?: string | null;

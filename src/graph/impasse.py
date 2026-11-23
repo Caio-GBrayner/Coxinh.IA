@@ -1,10 +1,11 @@
 from typing import Literal, Self
 
 from langgraph.types import interrupt
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.schemas import NonEmptyText
 from src.state import RecipeState
+from src.utils.ingredients import split_items
 
 
 ImpasseAction = Literal["save", "resume", "accept", "cancel"]
@@ -17,6 +18,16 @@ class ImpasseDecision(BaseModel):
     idempotency_key: NonEmptyText
     ingredient_additions: list[NonEmptyText] = Field(default_factory=list)
     user_guidance: NonEmptyText | None = None
+
+    @field_validator("ingredient_additions", mode="before")
+    @classmethod
+    def split_free_text(cls, value: object) -> object:
+        """Aceita texto corrido: 'queijo, carne e fogão' vira três itens."""
+        if value is None:
+            return []
+        if isinstance(value, (str, list)):
+            return split_items(value)
+        return value
 
     @model_validator(mode="after")
     def validate_action_payload(self) -> Self:
@@ -53,6 +64,10 @@ class WorkflowNotPaused(ValueError):
     """A conversa não está aguardando uma decisão do Impasse."""
 
 
+class ResumeLimitReached(ValueError):
+    """A conversa já gastou as novas tentativas; resta aceitar ou encerrar."""
+
+
 def record_impasse_decision(
     state: RecipeState,
     decision: ImpasseDecision,
@@ -84,6 +99,7 @@ def record_impasse_decision(
         )
 
     updates: dict[str, object] = {
+        "last_error": None,
         "user_action": decision.action,
         "state_version": current_version + 1,
         "last_impasse_decision_key": decision.idempotency_key,

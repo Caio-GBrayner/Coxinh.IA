@@ -4,6 +4,7 @@ import unicodedata
 from pydantic import BaseModel
 
 from src.schemas import Recipe
+from src.utils.ingredients import mentions, split_items
 
 
 ResourceCategory = Literal[
@@ -71,7 +72,7 @@ def validate_recipe_resources(
     unauthorized_ingredients = _find_unauthorized(
         recipe.ingredients,
         authorized_ingredients,
-        additional_authorizations=ingredient_additions,
+        additional_authorizations=split_items(ingredient_additions),
     )
     unauthorized_utensils = _find_unauthorized(
         recipe.utensils,
@@ -82,11 +83,20 @@ def validate_recipe_resources(
         authorized_preparation_methods,
     )
 
-    used_ingredients = {_normalize_resource(item) for item in recipe.ingredients}
+    # Tolerante de propósito: um item pedido no Impasse conta como usado se aparecer
+    # em qualquer lista da receita, sem depender de acento, maiúsculas ou do nome
+    # completo ("pao" casa com "pão francês"; "fogão" pode estar em utensílios).
+    # Uma regra rígida aqui prendia a conversa no Impasse sem saída.
+    used_resources = [
+        *recipe.ingredients,
+        *recipe.utensils,
+        *recipe.preparation_methods,
+    ]
+    # split_items também corrige adições antigas gravadas juntas ("queijo, carne").
     missing_ingredient_additions = [
         item
-        for item in ingredient_additions or []
-        if _normalize_resource(item) not in used_ingredients
+        for item in split_items(ingredient_additions)
+        if not any(mentions(item, used) for used in used_resources)
     ]
 
     has_violations = any(

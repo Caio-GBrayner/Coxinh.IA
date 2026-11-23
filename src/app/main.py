@@ -22,11 +22,12 @@ from uuid import uuid4
 from dotenv import load_dotenv
 
 from src.graph import builder as graph_builder
-from src.graph.impasse import ImpasseDecision
+from src.graph.impasse import ImpasseDecision, ResumeLimitReached, StateVersionConflict
 from src.schemas import Recipe, SubChefEvaluation
 from src.persistence.factory import build_session
 from src.recipe_session import RecipeSession
 from src.state import create_initial_state
+from src.utils.ingredients import split_items
 
 
 def read_line(prompt: str) -> str | None:
@@ -38,9 +39,8 @@ def read_line(prompt: str) -> str | None:
 
 
 def parse_list(text: str) -> list[str] | None:
-    """Converte 'a, b, c' em lista; texto vazio significa 'sem restrição'."""
-    items = [item.strip() for item in text.split(",") if item.strip()]
-    return items or None
+    """Converte texto livre ('a, b e c') em lista; texto vazio significa 'sem restrição'."""
+    return split_items(text) or None
 
 
 def ask_authorizations() -> dict[str, list[str] | None]:
@@ -187,7 +187,7 @@ def handle_impasse(
         version = result["state_version"]
 
         if choice == "s":
-            added = parse_list(read_line("Ingredientes a adicionar (vírgula): ") or "")
+            added = parse_list(read_line("Ingredientes a adicionar (texto livre: vírgula, \"e\" ou ;): ") or "")
             guidance = (read_line("Orientação para o Chef: ") or "").strip() or None
             if not (added or guidance):
                 print("Salvar exige um ingrediente ou uma orientação. Tente de novo.")
@@ -218,7 +218,19 @@ def handle_impasse(
             print("Opção inválida. Digite só a, s, r ou c (para adicionar um ingrediente, escolha s).")
             continue
 
-        result = session.submit_impasse_decision(thread_id, decision)
+        try:
+            result = session.submit_impasse_decision(thread_id, decision)
+        except (ResumeLimitReached, StateVersionConflict) as exc:
+            # Recusas esperadas: mostra o motivo e continua no Impasse.
+            print(f"\n{exc}")
+            result = session.get_state(thread_id)
+        except Exception as exc:
+            # Falha técnica no meio da decisão: volta ao Impasse em vez de travar.
+            print(f"\nA tentativa falhou ({type(exc).__name__}: {exc}).")
+            if not session.is_recoverable(thread_id):
+                raise
+            result = session.recover(thread_id)
+            print("A criação voltou ao Impasse. Você pode tentar de novo, aceitar ou encerrar.")
 
     return result
 

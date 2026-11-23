@@ -30,18 +30,26 @@ SUBCHEF_TEMPERATURE = 0.1
 def _resource_violations(
     result: ResourceValidationResult,
 ) -> list[str]:
+    """Cada violação vira uma frase em português que diz o que corrigir.
+
+    O texto aparece na tela do Impasse, então precisa explicar o motivo sem
+    termos técnicos.
+    """
     violations: list[str] = []
     for label, resources in (
-        ("Unauthorized ingredients", result.unauthorized_ingredients),
-        ("Unauthorized utensils", result.unauthorized_utensils),
+        ("Ingredientes fora da lista autorizada", result.unauthorized_ingredients),
+        ("Utensílios fora da lista autorizada", result.unauthorized_utensils),
         (
-            "Unauthorized preparation methods",
+            "Métodos de preparo fora da lista autorizada",
             result.unauthorized_preparation_methods,
         ),
-        ("Missing user-added ingredients", result.missing_ingredient_additions),
+        (
+            "Itens adicionados no Impasse que a receita ainda não usa",
+            result.missing_ingredient_additions,
+        ),
     ):
         if resources:
-            violations.append(f"{label}: {', '.join(resources)}")
+            violations.append(f"{label}: {', '.join(resources)}.")
     return violations
 
 
@@ -77,7 +85,7 @@ def subchef_node(state: RecipeState) -> dict[str, Any]:
         return {
             "subchef_evaluation": SubChefEvaluation(
                 decision="rejected",
-                critique="The proposal does not respect the authorized resources.",
+                critique=" ".join(violations),
                 evidence=violations,
             )
         }
