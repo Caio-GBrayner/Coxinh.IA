@@ -11,7 +11,10 @@ def finalize_node(state: RecipeState) -> dict[str, object]:
     if cook_output is None:
         raise ValueError("A finalização exige a saída do Cozinheiro.")
 
-    recipe = Recipe.model_validate(state["recipe"])
+    recipe_value = state.get("recipe")
+    if recipe_value is None:
+        raise ValueError("A finalização exige uma receita.")
+    recipe = Recipe.model_validate(recipe_value)
     presentation = CookOutput.model_validate(cook_output)
 
     final_response = {

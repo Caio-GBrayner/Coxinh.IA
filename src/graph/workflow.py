@@ -54,9 +54,6 @@ def project_serializer() -> JsonPlusSerializer:
     )
 
 
-# Nome antigo, mantido para quem já importava a função privada.
-_project_serializer = project_serializer
-
 
 class RecipeWorkflow:
     """Executa o grafo com checkpointer e registro de decisões injetáveis.
@@ -137,7 +134,7 @@ class RecipeWorkflow:
                     raise IdempotencyKeyReuse(
                         "An idempotency key cannot be reused for a different decision."
                     )
-                if stored.completed:
+                if stored.completed and stored.result is not None:
                     return deepcopy(stored.result)
 
             snapshot = self._graph.get_state(run_config)

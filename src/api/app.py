@@ -132,7 +132,7 @@ def recipe_view(
         "thread_id": thread_id,
         "status": api_status,
         "state_version": state.get("state_version"),
-        "recipe": recipe.model_dump(mode="json") if hasattr(recipe, "model_dump") else recipe,
+        "recipe": recipe.model_dump(mode="json") if isinstance(recipe, BaseModel) else recipe,
         "critique": critique,
         "evidence": list(getattr(evaluation, "evidence", None) or []) if rejected else [],
         "resume_allowed": resume_allowed(state),

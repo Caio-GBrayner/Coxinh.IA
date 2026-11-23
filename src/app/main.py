@@ -244,7 +244,11 @@ def run_request(
 ) -> None:
     thread_id = f"cli-{uuid4().hex[:8]}"
     state = create_initial_state(raw_input, thread_id)
-    state.update(authorizations)
+    state["authorized_ingredients"] = authorizations.get("authorized_ingredients")
+    state["authorized_utensils"] = authorizations.get("authorized_utensils")
+    state["authorized_preparation_methods"] = authorizations.get(
+        "authorized_preparation_methods"
+    )
 
     print(f"\n[{thread_id}] criando receita...")
     result = session.start(state)
@@ -363,7 +367,7 @@ def main() -> None:
             show_recipe(session, line.removeprefix("/ver").strip())
             continue
 
-        authorizations = (
+        authorizations: dict[str, list[str] | None] = (
             {
                 "authorized_ingredients": None,
                 "authorized_utensils": None,

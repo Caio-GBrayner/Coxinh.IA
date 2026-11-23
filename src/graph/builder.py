@@ -16,7 +16,7 @@ from src.graph.routing import route_after_subchef
 from src.state import RecipeState, create_initial_state
 
 
-def prepare_node(state: dict[str, Any]) -> dict[str, Any]:
+def prepare_node(state: RecipeState) -> RecipeState:
     """Monta o estado inicial a partir da entrada simples (raw_input, thread_id)."""
     return create_initial_state(state["raw_input"], state["thread_id"])
 
