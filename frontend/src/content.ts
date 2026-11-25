@@ -84,6 +84,7 @@ export const copy = {
     restoring: "Consultando sua criação",
     incomplete: "O resultado recebido está incompleto.",
     cancelled: "Criação encerrada.",
+    blocked: "Pedido não enviado ao Chef",
     interrupted: "A criação foi interrompida. Inicie um novo pedido.",
     executionError: "Não foi possível concluir esta criação.",
     running:
