@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, Field, SecretStr
 
 
 class LLMConfig(BaseModel):
@@ -10,6 +10,14 @@ class LLMConfig(BaseModel):
     api_key: SecretStr
     model: str
     provider: str = "groq"
+
+
+class GuardConfig(BaseModel):
+    """Define o juiz e os limites do guardrail de entrada."""
+
+    llm: LLMConfig
+    max_input_chars: int = Field(gt=0)
+    timeout_seconds: float = Field(gt=0)
 
 
 class TavilyConfig(BaseModel):
@@ -23,9 +31,37 @@ def load_llm_config() -> LLMConfig:
 
     load_dotenv()
 
-    llm_provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
-    llm_model = os.getenv("LLM_MODEL", "").strip()
+    return _llm_config(
+        os.getenv("LLM_PROVIDER", "groq").strip().lower(),
+        os.getenv("LLM_MODEL", "").strip(),
+    )
 
+
+def load_guard_config() -> GuardConfig | None:
+    """Carrega o guardrail; None quando ele foi desligado de propósito."""
+
+    load_dotenv()
+
+    # Só um "não" explícito desliga: um valor digitado errado mantém a proteção.
+    if os.getenv("GUARD_ENABLED", "").strip().lower() in ("false", "0", "no", "off"):
+        return None
+
+    main_provider = os.getenv("LLM_PROVIDER", "groq").strip().lower()
+    provider = os.getenv("GUARD_JUDGE_PROVIDER", "").strip().lower() or main_provider
+    model = os.getenv("GUARD_JUDGE_MODEL", "").strip()
+    if not model and provider != main_provider:
+        raise ValueError("GUARD_JUDGE_MODEL must be set when the judge uses another provider.")
+
+    return GuardConfig(
+        llm=_llm_config(provider, model or os.getenv("LLM_MODEL", "").strip()),
+        max_input_chars=int(os.getenv("GUARD_MAX_INPUT_CHARS", "").strip() or 4000),
+        timeout_seconds=float(
+            os.getenv("GUARD_JUDGE_TIMEOUT_SECONDS", "").strip() or 15
+        ),
+    )
+
+
+def _llm_config(llm_provider: str, llm_model: str) -> LLMConfig:
     if llm_provider == "google":
         key_variable = "GOOGLE_API_KEY"
         llm_key = os.getenv(key_variable, "").strip()

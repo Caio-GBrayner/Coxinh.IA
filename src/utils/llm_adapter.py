@@ -6,7 +6,7 @@ from langchain_groq import ChatGroq
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from src.config import load_llm_config
+from src.config import LLMConfig, load_llm_config
 
 
 logger = logging.getLogger(__name__)
@@ -15,17 +15,27 @@ STRUCTURED_MAX_ATTEMPTS = 3
 
 
 def call_llm(temperature: float) -> BaseChatModel:
-    config = load_llm_config()
+    return create_chat_model(load_llm_config(), temperature)
+
+
+def create_chat_model(
+    config: LLMConfig,
+    temperature: float,
+    **options: Any,
+) -> BaseChatModel:
+    """Cria o cliente do provedor; `options` vai direto para ele (timeout, max_retries)."""
     if config.provider == "google":
         return ChatGoogleGenerativeAI(
             api_key=config.api_key.get_secret_value(),
             model=config.model,
+            **options,
         )
 
     return ChatGroq(
         api_key=config.api_key,
         model=config.model,
         temperature=temperature,
+        **options,
     )
 
 

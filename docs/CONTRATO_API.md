@@ -22,6 +22,7 @@ uvicorn src.api.app:create_app --factory --host 127.0.0.1 --port 8081
 | `awaiting_user` | Impasse: o SubChef rejeitou a receita e aguarda uma decisão. |
 | `completed` | Receita pronta, com `final_response`. |
 | `cancelled` | O usuário encerrou no Impasse. |
+| `blocked` | O guardrail recusou o pedido antes do Chef. `guardrail` traz o motivo. Comece um pedido novo. |
 | `error` | A execução falhou; `error` traz a mensagem. Comece um pedido novo. |
 | `interrupted` | A execução parou no meio (por exemplo, a API caiu durante a geração). Comece um pedido novo. |
 
@@ -47,11 +48,14 @@ Resposta: `{"thread_id": "rcp-...", "status": "running"}`.
   "ingredient_additions": [],
   "user_guidance": null,
   "final_response": null,
+  "guardrail": null,
   "error": null
 }
 ```
 
 Enquanto `status` for `running`, só vêm `thread_id`, `status` e `error`. Em `completed`, `final_response` traz `recipe` (título, subtítulo, massa, recheio, listas, passos), `health` (aviso, contraindicações, fontes, incerteza e status) e `image`.
+
+Em `blocked`, `guardrail` é `{"code", "message", "reason"}`: `message` é o texto completo para o usuário, já com o motivo. Códigos: `prompt_injection`, `guard_uncertain`, `guard_unavailable` e `input_too_long`.
 
 `final_response.image.url` é um caminho da própria API (`/images/<arquivo>`) ou `null`. Referências simuladas nunca viram URL. Monte a URL completa com o endereço da API.
 
@@ -82,6 +86,8 @@ Repetir a mesma decisão com a mesma chave devolve 200 com o estado atual, sem e
 
 **Limite de retomadas:** cada conversa tem até 4 ciclos de revisão. Depois disso `resume_allowed` fica `false` e `resume` responde 409 `resume_limit_reached`; `save`, `accept` e `cancel` continuam disponíveis.
 
+**Guardrail.** Todo texto enviado numa decisão (`ingredient_additions` e `user_guidance`) é verificado antes de ser registrado. Um texto recusado responde 422 (ou 503, se a verificação estiver fora do ar), continua em `awaiting_user` e não gasta `state_version` nem `idempotency_key`. Num `resume` com texto, que roda em segundo plano, a recusa aparece em `error`.
+
 ### `GET /recipes` → 200
 
 Receitas concluídas, da mais recente para a mais antiga. O carrossel é global (todos veem a mesma lista).
@@ -111,6 +117,8 @@ Formato: `{"detail": {"code": "...", "message": "..."}}`. Erros de validação d
 | 409 | `state_version_conflict` | `expected_state_version` diferente da versão atual. Releia o estado. |
 | 409 | `idempotency_key_reuse` | A mesma chave foi usada com outro conteúdo. |
 | 409 | `resume_limit_reached` | Acabaram as retomadas desta conversa. Aceite ou encerre. |
+| 422 | `prompt_injection`, `guard_uncertain`, `input_too_long` | O guardrail recusou o texto da decisão. |
+| 503 | `guard_unavailable` | A verificação do guardrail falhou. Tente de novo. |
 | 422 | — | Corpo inválido (campo ausente, ação desconhecida, combinação proibida). |
 
 ## Configuração
@@ -121,6 +129,10 @@ Formato: `{"detail": {"code": "...", "message": "..."}}`. Erros de validação d
 | `DATABASE_PATH` | `data/coxinh.db` | Receitas concluídas e decisões do Impasse. |
 | `CHECKPOINT_DATABASE_PATH` | `data/checkpoints.db` | Checkpoints do LangGraph. |
 | `IMAGE_STORAGE_DIR` | `data/images` | Pasta servida em `/images`. |
+| `GUARD_ENABLED` | `true` | Só `false`, `0`, `no` ou `off` desligam o guardrail. |
+| `GUARD_JUDGE_PROVIDER`, `GUARD_JUDGE_MODEL` | os do Chef | Provedor e modelo do juiz. |
+| `GUARD_MAX_INPUT_CHARS` | `4000` | Tamanho máximo do texto verificado. |
+| `GUARD_JUDGE_TIMEOUT_SECONDS` | `15` | Prazo de cada tentativa do juiz. |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Origens do front, separadas por vírgula. |
 
 ## Limites

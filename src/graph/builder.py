@@ -8,6 +8,7 @@ from src.graph.finalize import finalize_node
 from src.graph.impasse import impasse_node, route_after_impasse
 from src.graph.nodes.chef import chef_node
 from src.graph.nodes.cook import cook_node
+from src.graph.nodes.guard import guard_node, route_after_guard
 from src.graph.nodes.health import health_node
 from src.graph.nodes.image import image_node
 from src.graph.nodes.record_review import record_review_node
@@ -30,7 +31,7 @@ def build_graph(
     """Monta o grafo de revisão e finalização da receita.
 
     Com `input_schema`, a entrada é reduzida (por exemplo `raw_input` e
-    `thread_id`) e um nó `prepare` cria o estado inicial antes do Chef.
+    `thread_id`) e um nó `prepare` cria o estado inicial antes do guardrail.
 
     `with_impasse` inclui o nó de Impasse. Por padrão ele existe quando há
     checkpointer. O Studio o pede sem checkpointer, porque a plataforma fornece a
@@ -41,6 +42,7 @@ def build_graph(
 
     builder = StateGraph(RecipeState, input_schema=input_schema)
 
+    builder.add_node("guard", guard_node)
     builder.add_node("chef", chef_node)
     builder.add_node("subchef", subchef_node)
     builder.add_node("record_review", record_review_node)
@@ -50,11 +52,14 @@ def build_graph(
     builder.add_node("finalize", finalize_node)
 
     if input_schema is None:
-        builder.add_edge(START, "chef")
+        builder.add_edge(START, "guard")
     else:
         builder.add_node("prepare", prepare_node)
         builder.add_edge(START, "prepare")
-        builder.add_edge("prepare", "chef")
+        builder.add_edge("prepare", "guard")
+    builder.add_conditional_edges(
+        "guard", route_after_guard, {"chef": "chef", "end": END}
+    )
     builder.add_edge("chef", "subchef")
     builder.add_edge("subchef", "record_review")
     builder.add_edge("cook", "health")

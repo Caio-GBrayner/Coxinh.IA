@@ -277,6 +277,12 @@ function App() {
                         {!session.busy && !detail && status === "cancelled" && (
                             <h2>{copy.cancelled}</h2>
                         )}
+                        {!session.busy && !detail && status === "blocked" && (
+                            <div role="alert">
+                                <h2>{copy.blocked}</h2>
+                                <p>{session.active?.guardrail?.message}</p>
+                            </div>
+                        )}
                         {!session.busy &&
                             !detail &&
                             ["error", "interrupted"].includes(status) && (

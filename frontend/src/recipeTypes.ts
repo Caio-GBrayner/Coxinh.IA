@@ -8,6 +8,7 @@ export interface RecipeView {
         | "awaiting_user"
         | "completed"
         | "cancelled"
+        | "blocked"
         | "error";
     state_version?: number;
     critique?: string | null;
@@ -17,6 +18,8 @@ export interface RecipeView {
     ingredient_additions?: string[];
     user_guidance?: string | null;
     final_response?: FinalResponse | null;
+    /** Preenchido quando o guardrail recusou o pedido. */
+    guardrail?: { code: string; message: string; reason: string | null } | null;
 }
 
 /** Proposta revisada pelo SubChef e mostrada durante um Impasse. */

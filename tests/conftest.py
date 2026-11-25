@@ -6,6 +6,7 @@ import pytest
 from langchain_core.runnables import RunnableLambda
 
 from src import mcp_client
+from src.graph import guardrail
 from src.graph.nodes import cook, health
 
 
@@ -29,6 +30,27 @@ def isolate_tool_client(monkeypatch):
     mcp_client.reset_default_client()
     yield
     mcp_client.reset_default_client()
+
+
+@pytest.fixture(autouse=True)
+def stub_judge(monkeypatch):
+    """O juiz aprova tudo, sem LLM. Testes do guardrail sobrescrevem o stub."""
+    for name in (
+        "GUARD_JUDGE_PROVIDER",
+        "GUARD_JUDGE_MODEL",
+        "GUARD_MAX_INPUT_CHARS",
+        "GUARD_JUDGE_TIMEOUT_SECONDS",
+    ):
+        monkeypatch.setenv(name, "")
+    monkeypatch.setenv("GUARD_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.setenv("LLM_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+    judge = Mock(
+        return_value=guardrail.JudgeVerdict(verdict="legitima", reason="Receita.")
+    )
+    monkeypatch.setattr(guardrail, "run_judge", judge)
+    return judge
 
 
 @pytest.fixture(autouse=True)
