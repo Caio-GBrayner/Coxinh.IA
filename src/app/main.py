@@ -22,6 +22,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 
 from src.graph import builder as graph_builder
+from src.graph.guardrail import GuardResult, InputBlocked
 from src.graph.impasse import ImpasseDecision, ResumeLimitReached, StateVersionConflict
 from src.schemas import Recipe, SubChefEvaluation
 from src.persistence.factory import build_session
@@ -192,7 +193,6 @@ def handle_impasse(
             if not (added or guidance):
                 print("Salvar exige um ingrediente ou uma orientação. Tente de novo.")
                 continue
-            print("Salvo. Escolha [r] para o Chef tentar de novo.")
             decision = ImpasseDecision(
                 action="save",
                 expected_state_version=version,
@@ -220,7 +220,9 @@ def handle_impasse(
 
         try:
             result = session.submit_impasse_decision(thread_id, decision)
-        except (ResumeLimitReached, StateVersionConflict) as exc:
+            if choice == "s":
+                print("Salvo. Escolha [r] para o Chef tentar de novo.")
+        except (InputBlocked, ResumeLimitReached, StateVersionConflict) as exc:
             # Recusas esperadas: mostra o motivo e continua no Impasse.
             print(f"\n{exc}")
             result = session.get_state(thread_id)
@@ -261,6 +263,8 @@ def run_request(
     if result.get("status") == "completed":
         print_final(result["final_response"])
         offer_to_open_image(result["final_response"])
+    elif result.get("status") == "blocked":
+        print(f"\n{GuardResult.model_validate(result['guardrail']).message}")
     else:
         print(f"\nExecução encerrada com status: {result.get('status')}")
     print(
@@ -348,6 +352,7 @@ def main() -> None:
 
     if args.demo_impasse:
         install_impasse_demo()
+        os.environ["GUARD_ENABLED"] = "false"  # a demonstração não depende de LLM
         args.livre = True
         print("MODO DEMO: Chef e SubChef falsos. Qualquer pedido gera impasse.\n")
     session = build_session()  # PERSISTENCE=sqlite (padrão) guarda o histórico em data/

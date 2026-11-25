@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, StringConstraints
 from typing_extensions import Annotated
 
+from src.graph.guardrail import GuardResult, InputBlocked
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
@@ -52,7 +53,7 @@ IMAGE_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "public, max-age=86400, immutable",
 }
-FINISHED_STATUSES = {"awaiting_user", "completed", "cancelled"}
+FINISHED_STATUSES = {"awaiting_user", "completed", "cancelled", "blocked"}
 
 
 RawInput = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4000)]
@@ -110,6 +111,17 @@ def public_response(final_response: dict[str, Any] | None) -> dict[str, Any] | N
     return response
 
 
+def guardrail_view(state: dict[str, Any]) -> dict[str, Any] | None:
+    """Motivo do bloqueio para o front, ou None se o pedido não foi bloqueado."""
+    stored = state.get("guardrail")
+    if stored is None:
+        return None
+    result = GuardResult.model_validate(stored)
+    if result.allowed:
+        return None
+    return {"code": result.code, "message": result.message, "reason": result.reason}
+
+
 def recipe_view(
     thread_id: str,
     state: dict[str, Any],
@@ -139,6 +151,7 @@ def recipe_view(
         "ingredient_additions": split_items(state.get("ingredient_additions", [])),
         "user_guidance": state.get("user_guidance"),
         "final_response": public_response(state.get("final_response")),
+        "guardrail": guardrail_view(state),
         "error": None,
     }
 
@@ -188,6 +201,9 @@ def create_app(
             try:
                 job()
             except Exception as exc:  # a falha vira estado consultável
+                if isinstance(exc, InputBlocked):
+                    registry.finish(thread_id, str(exc))
+                    return
                 logger.exception("Recipe run %s failed", thread_id)
                 registry.finish(thread_id, f"{type(exc).__name__}: {exc}")
             else:
@@ -303,6 +319,10 @@ def create_app(
                 raise problem(409, "idempotency_key_reuse", str(exc)) from exc
             except ResumeLimitReached as exc:
                 raise problem(409, "resume_limit_reached", str(exc)) from exc
+            except InputBlocked as exc:
+                code = exc.result.code
+                http_status = 503 if code == "guard_unavailable" else 422
+                raise problem(http_status, code, str(exc)) from exc
             return JSONResponse(current_view(thread_id), status_code=200)
 
         if not registry.try_start(thread_id):

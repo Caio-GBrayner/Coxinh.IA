@@ -12,6 +12,7 @@ WorkflowStatus = Literal[
     "awaiting_user",
     "completed",
     "cancelled",
+    "blocked",
     "error",
 ]
 
@@ -29,6 +30,8 @@ class RecipeState(TypedDict, total=False):
     ingredient_additions: Required[list[str]]
     user_guidance: Required[str | None]
     user_action: Required[Literal["save", "resume", "accept", "cancel"] | None]
+
+    guardrail: dict[str, Any]
 
     recipe: Recipe
     subchef_evaluation: SubChefEvaluation

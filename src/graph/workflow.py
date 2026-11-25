@@ -9,6 +9,7 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Command
 
 from src.graph.builder import build_graph
+from src.graph.guardrail import InputBlocked, check_text
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
@@ -35,7 +36,7 @@ RECOVERY_MESSAGE = (
     "A última tentativa não terminou por um erro técnico. "
     "Você pode tentar de novo, aceitar a proposta atual ou encerrar."
 )
-FINISHED_STATUSES = ("completed", "cancelled")
+FINISHED_STATUSES = ("completed", "cancelled", "blocked")
 
 
 def resume_allowed(state: dict[str, Any]) -> bool:
@@ -184,6 +185,9 @@ class RecipeWorkflow:
                         "Limite de novas tentativas atingido. "
                         "Aceite a proposta atual ou encerre a criação."
                     )
+                # Antes da reserva e do grafo: um texto recusado não gasta a versão
+                # nem a chave, e não fica guardado como resposta do Impasse.
+                _check_decision_text(decision)
                 self._claim(thread_id, decision, fingerprint, current_version)
                 graph_input = Command(resume=decision.model_dump())
 
@@ -293,6 +297,16 @@ class RecipeWorkflow:
 
 # Nome antigo, mantido porque testes e módulos ainda o importam.
 InMemoryWorkflow = RecipeWorkflow
+
+
+def _check_decision_text(decision: ImpasseDecision) -> None:
+    parts = [*decision.ingredient_additions, decision.user_guidance or ""]
+    text = "\n".join(part for part in parts if part)
+    if not text:
+        return
+    result = check_text(text, "impasse")
+    if not result.allowed:
+        raise InputBlocked(result)
 
 
 def _fingerprint(decision: ImpasseDecision) -> str:

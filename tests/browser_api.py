@@ -2,8 +2,13 @@
 
 Não usar em produção. Executar pelo Playwright, sem credenciais nem chamadas pagas.
 """
+import os
+
 from src.graph import builder
 from src.schemas import CookOutput, Recipe, SubChefEvaluation
+
+
+os.environ["GUARD_ENABLED"] = "false"
 
 
 def chef(state):

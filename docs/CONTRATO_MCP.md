@@ -42,6 +42,7 @@ Códigos de erro previstos:
 | --- | --- |
 | `invalid_input` | Entrada reprovada pela validação do contrato. |
 | `workflow_not_found` | Não existe conversa para o `thread_id`. |
+| `input_blocked` | O guardrail recusou o texto da decisão. `details.guard_code` diz o motivo; nada foi registrado. |
 | `workflow_not_paused` | A conversa não está aguardando decisão do Impasse. |
 | `state_version_conflict` | `expected_state_version` diferente da versão atual. `details` traz `expected` e `current`. |
 | `idempotency_key_reuse` | A mesma chave foi usada com uma decisão diferente. |
@@ -92,7 +93,7 @@ As regras de combinação vêm de `ImpasseDecision` e não são reescritas no se
 
 **Saída (projeção reduzida, sem o estado completo):** `thread_id`, `status`, `user_action`, `state_version`, `revision_count`, `total_attempts`, `recipe_version`.
 
-**Erros:** `invalid_input`, `workflow_not_found`, `workflow_not_paused`, `state_version_conflict`, `idempotency_key_reuse`.
+**Erros:** `invalid_input`, `input_blocked`, `workflow_not_found`, `workflow_not_paused`, `state_version_conflict`, `idempotency_key_reuse`.
 
 **Atenção:** com `resume`, a chamada continua o grafo (Chef, SubChef, Cozinheiro, Saúde) até concluir ou pausar de novo; com `accept`, segue direto para Cozinheiro, Saúde, Imagem e finalização. As duas podem demorar e chamar o LLM. O cliente deve ter um tempo limite adequado. `save` e `cancel` não chamam o LLM.
 

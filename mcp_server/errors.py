@@ -6,6 +6,7 @@ from fastmcp.exceptions import ToolError
 
 ErrorCode = Literal[
     "invalid_input",
+    "input_blocked",
     "workflow_not_found",
     "workflow_not_paused",
     "state_version_conflict",

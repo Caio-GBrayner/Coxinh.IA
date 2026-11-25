@@ -6,6 +6,7 @@ IMAGE_STORAGE_DIR, definidos pelo teste em um diretório temporário.
 """
 
 import argparse
+import os
 
 import uvicorn
 
@@ -18,6 +19,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, required=True)
     args = parser.parse_args()
 
+    os.environ["GUARD_ENABLED"] = "false"
     # Antes de montar a sessão: o grafo lê os nós no momento da construção.
     install_offline_agents(graph_module)
 

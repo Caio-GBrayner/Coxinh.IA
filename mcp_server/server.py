@@ -15,6 +15,7 @@ from mcp_server.images import (
     ImageService,
     SimulatedImageProvider,
 )
+from src.graph.guardrail import InputBlocked
 from src.graph.impasse import (
     IdempotencyKeyReuse,
     ImpasseDecision,
@@ -191,6 +192,10 @@ def _register_impasse(mcp: FastMCP, session: RecipeSession) -> None:
             raise tool_error("idempotency_key_reuse", str(exc)) from exc
         except WorkflowNotPaused as exc:
             raise tool_error("workflow_not_paused", str(exc)) from exc
+        except InputBlocked as exc:
+            raise tool_error(
+                "input_blocked", str(exc), guard_code=exc.result.code
+            ) from exc
         except ValueError as exc:
             raise tool_error("invalid_input", str(exc)) from exc
 
