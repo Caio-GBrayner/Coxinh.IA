@@ -52,8 +52,15 @@ def load_guard_config() -> GuardConfig | None:
     if not model and provider != main_provider:
         raise ValueError("GUARD_JUDGE_MODEL must be set when the judge uses another provider.")
 
+    # Chave própria do juiz. Sem ela, o juiz usa a chave do provedor escolhido.
+    judge_key = os.getenv("GUARD_JUDGE_API_KEY", "").strip() or None
+
     return GuardConfig(
-        llm=_llm_config(provider, model or os.getenv("LLM_MODEL", "").strip()),
+        llm=_llm_config(
+            provider,
+            model or os.getenv("LLM_MODEL", "").strip(),
+            api_key=judge_key,
+        ),
         max_input_chars=int(os.getenv("GUARD_MAX_INPUT_CHARS", "").strip() or 4000),
         timeout_seconds=float(
             os.getenv("GUARD_JUDGE_TIMEOUT_SECONDS", "").strip() or 15
@@ -61,16 +68,15 @@ def load_guard_config() -> GuardConfig | None:
     )
 
 
-def _llm_config(llm_provider: str, llm_model: str) -> LLMConfig:
+def _llm_config(llm_provider: str, llm_model: str, api_key: str | None = None) -> LLMConfig:
     if llm_provider == "google":
         key_variable = "GOOGLE_API_KEY"
-        llm_key = os.getenv(key_variable, "").strip()
     elif llm_provider == "groq":
         key_variable = "LLM_KEY"
-        llm_key = os.getenv(key_variable, "").strip()
     else:
         raise ValueError("LLM_PROVIDER must be 'google' or 'groq'.")
 
+    llm_key = api_key or os.getenv(key_variable, "").strip()
     if not llm_key:
         raise ValueError(f"{key_variable} must be set.")
 

@@ -174,6 +174,19 @@ def test_anything_else_keeps_it_on(value, monkeypatch):
     assert check_text(ATTACKS[0], "request").code == "prompt_injection"
 
 
+def test_judge_key_is_separate_from_the_chef_key(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.setenv("LLM_KEY", "chave-do-chef")
+    monkeypatch.setenv("GUARD_JUDGE_PROVIDER", "groq")
+    monkeypatch.setenv("GUARD_JUDGE_MODEL", "openai/gpt-oss-20b")
+    monkeypatch.setenv("GUARD_JUDGE_API_KEY", "chave-do-juiz")
+    assert config.load_guard_config().llm.api_key.get_secret_value() == "chave-do-juiz"
+    assert config.load_llm_config().api_key.get_secret_value() == "chave-do-chef"
+
+    monkeypatch.setenv("GUARD_JUDGE_API_KEY", "")
+    assert config.load_guard_config().llm.api_key.get_secret_value() == "chave-do-chef"
+
+
 def test_judge_uses_chef_model_by_default_and_can_be_overridden(monkeypatch):
     assert config.load_guard_config().llm.model == "test-model"
 
