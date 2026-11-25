@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableLambda
 from src import mcp_client
 from src.graph import guardrail
 from src.graph.nodes import cook, health
+from tests.backends import SqliteBackend, postgres_backend
 
 
 @pytest.fixture(autouse=True)
@@ -27,9 +28,20 @@ def isolate_tool_client(monkeypatch):
     monkeypatch.setenv("LANGSMITH_TRACING", "false")
     # Os testes nunca gravam no banco do projeto (data/).
     monkeypatch.setenv("PERSISTENCE", "memory")
+    monkeypatch.setenv("DATABASE_URL", "")
     mcp_client.reset_default_client()
     yield
     mcp_client.reset_default_client()
+
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def backend(request, tmp_path):
+    """Cada banco suportado. O Postgres é pulado sem TEST_DATABASE_URL."""
+    if request.param == "sqlite":
+        yield SqliteBackend(tmp_path)
+        return
+    with postgres_backend() as postgres:
+        yield postgres
 
 
 @pytest.fixture(autouse=True)

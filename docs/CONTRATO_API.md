@@ -98,7 +98,7 @@ Receitas concluídas, da mais recente para a mais antiga. O carrossel é global 
 
 ### `GET /images/{arquivo}` → 200
 
-Serve a imagem gravada pelo provedor. Aceita só nomes simples (`[A-Za-z0-9_-]` mais `.png`, `.jpg`, `.jpeg`, `.webp` ou `.svg`). Qualquer outro nome, ou arquivo ausente, devolve 404.
+Serve a imagem gravada pelo provedor, do disco ou do Postgres. Aceita só nomes simples (`[A-Za-z0-9_-]` mais `.png`, `.jpg`, `.jpeg`, `.webp` ou `.svg`). Qualquer outro nome, ou arquivo ausente, devolve 404.
 
 ### `GET /health` → 200
 
@@ -125,10 +125,11 @@ Formato: `{"detail": {"code": "...", "message": "..."}}`. Erros de validação d
 
 | Variável | Padrão | Uso |
 | --- | --- | --- |
-| `PERSISTENCE` | `sqlite` | `sqlite` sobrevive a reinícios; `memory` perde tudo ao encerrar. |
-| `DATABASE_PATH` | `data/coxinh.db` | Receitas concluídas e decisões do Impasse. |
-| `CHECKPOINT_DATABASE_PATH` | `data/checkpoints.db` | Checkpoints do LangGraph. |
-| `IMAGE_STORAGE_DIR` | `data/images` | Pasta servida em `/images`. |
+| `PERSISTENCE` | `postgres` se houver `DATABASE_URL`, senão `sqlite` | `sqlite` e `postgres` sobrevivem a reinícios; `memory` perde tudo ao encerrar. |
+| `DATABASE_URL` | vazio | Postgres com receitas, decisões, checkpoints e imagens. Obrigatória em `postgres`. |
+| `DATABASE_PATH` | `data/coxinh.db` | SQLite: receitas concluídas e decisões do Impasse. |
+| `CHECKPOINT_DATABASE_PATH` | `data/checkpoints.db` | SQLite: checkpoints do LangGraph. |
+| `IMAGE_STORAGE_DIR` | `data/images` | Pasta servida em `/images`. Não é usada em `postgres`. |
 | `GUARD_ENABLED` | `true` | Só `false`, `0`, `no` ou `off` desligam o guardrail. |
 | `GUARD_JUDGE_PROVIDER`, `GUARD_JUDGE_MODEL` | os do Chef | Provedor e modelo do juiz. |
 | `GUARD_MAX_INPUT_CHARS` | `4000` | Tamanho máximo do texto verificado. |

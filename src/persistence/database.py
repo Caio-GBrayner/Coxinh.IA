@@ -1,4 +1,4 @@
-"""Conexões SQLite compartilhadas pelos armazenamentos da aplicação.
+"""Modo de persistência e conexões SQLite dos armazenamentos da aplicação.
 
 Cada operação abre e fecha a própria conexão. Isso evita compartilhar um objeto
 `sqlite3.Connection` entre threads (a API executa receitas em segundo plano) e
@@ -18,6 +18,30 @@ from dotenv import load_dotenv
 DEFAULT_DATABASE_PATH = "data/coxinh.db"
 DEFAULT_CHECKPOINT_PATH = "data/checkpoints.db"
 BUSY_TIMEOUT_MS = 30_000
+
+
+PERSISTENCE_MODES = ("sqlite", "postgres", "memory")
+
+
+def persistence_mode() -> str:
+    """Modo pedido em PERSISTENCE; vazio usa Postgres se houver DATABASE_URL."""
+    load_dotenv()
+    mode = os.getenv("PERSISTENCE", "").strip().lower()
+    if not mode:
+        return "postgres" if os.getenv("DATABASE_URL", "").strip() else "sqlite"
+    if mode not in PERSISTENCE_MODES:
+        raise ValueError(
+            f"PERSISTENCE must be one of {', '.join(PERSISTENCE_MODES)}; got '{mode}'."
+        )
+    return mode
+
+
+def database_url() -> str:
+    load_dotenv()
+    url = os.getenv("DATABASE_URL", "").strip()
+    if not url:
+        raise ValueError("DATABASE_URL must be set when PERSISTENCE is 'postgres'.")
+    return url
 
 
 def resolve_path(env_name: str, default: str) -> Path:

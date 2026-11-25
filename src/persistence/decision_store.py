@@ -62,7 +62,7 @@ class DecisionStore(Protocol):
 
 
 class InMemoryDecisionStore:
-    """Mesmo contrato do SQLite, para testes e para o modo sem persistência."""
+    """Mesmo contrato dos bancos, para testes e para o modo sem persistência."""
 
     def __init__(self) -> None:
         self._by_key: dict[tuple[str, str], StoredDecision] = {}

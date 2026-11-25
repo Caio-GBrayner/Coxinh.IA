@@ -1,10 +1,10 @@
-"""Receitas concluídas gravadas em SQLite, para o carrossel sobreviver a reinícios."""
+"""Receitas concluídas gravadas em banco, para o carrossel sobreviver a reinícios."""
 
 from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from src.persistence.database import open_connection
 
@@ -26,6 +26,14 @@ class UnsupportedSchemaVersion(StoredRecipeError):
 
 class CorruptedRecipe(StoredRecipeError):
     """O conteúdo gravado não é um JSON de objeto válido."""
+
+
+class RecipeRepository(Protocol):
+    def save(self, recipe_id: str, response: dict[str, Any]) -> None: ...
+
+    def list(self) -> list[tuple[str, dict[str, Any]]]: ...
+
+    def get(self, recipe_id: str) -> dict[str, Any] | None: ...
 
 
 class RecipeStore:
@@ -72,7 +80,7 @@ class RecipeStore:
         recipes = []
         for recipe_id, schema_version, payload in rows:
             try:
-                recipes.append((recipe_id, _decode(recipe_id, schema_version, payload)))
+                recipes.append((recipe_id, decode_recipe(recipe_id, schema_version, payload)))
             except StoredRecipeError as exc:
                 logger.warning("Skipping stored recipe %s: %s", recipe_id, exc)
         return recipes
@@ -87,10 +95,10 @@ class RecipeStore:
         if row is None:
             return None
         schema_version, payload = row
-        return _decode(recipe_id, schema_version, payload)
+        return decode_recipe(recipe_id, schema_version, payload)
 
 
-def _decode(recipe_id: str, schema_version: int, payload: str) -> dict[str, Any]:
+def decode_recipe(recipe_id: str, schema_version: int, payload: str) -> dict[str, Any]:
     if schema_version > SCHEMA_VERSION:
         raise UnsupportedSchemaVersion(
             f"Recipe '{recipe_id}' uses schema {schema_version}; "

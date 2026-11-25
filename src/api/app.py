@@ -23,7 +23,7 @@ from uuid import uuid4
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, StringConstraints
 from typing_extensions import Annotated
 
@@ -36,6 +36,7 @@ from src.graph.impasse import (
     WorkflowNotPaused,
 )
 from src.graph.workflow import RECOVERY_MESSAGE, resume_allowed
+from src.persistence.image_store import FileImageStore, ImageStore, build_image_store
 from src.recipe_session import RecipeSession
 from src.state import create_initial_state
 from src.utils.ingredients import split_items
@@ -44,9 +45,15 @@ from src.utils.ingredients import split_items
 logger = logging.getLogger(__name__)
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://localhost:3000"
-DEFAULT_IMAGE_DIR = "data/images"
 MAX_WORKERS = 4
 IMAGE_NAME = re.compile(r"^[A-Za-z0-9_-]{1,128}\.(png|jpg|jpeg|webp|svg)$")
+IMAGE_MEDIA_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+}
 # Imagens nunca executam nada: SVG servido com sandbox e sem scripts.
 IMAGE_HEADERS = {
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
@@ -174,7 +181,9 @@ def create_app(
 
         session = build_session()
 
-    images = Path(image_dir or os.getenv("IMAGE_STORAGE_DIR", "").strip() or DEFAULT_IMAGE_DIR)
+    images: ImageStore = (
+        build_image_store() if image_dir is None else FileImageStore(image_dir)
+    )
     origins = cors_origins
     if origins is None:
         raw = os.getenv("CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
@@ -333,13 +342,15 @@ def create_app(
         return JSONResponse({"thread_id": thread_id, "status": "running"}, status_code=202)
 
     @app.get("/images/{filename}")
-    def get_image(filename: str) -> FileResponse:
-        if not IMAGE_NAME.fullmatch(filename):
+    def get_image(filename: str) -> Response:
+        match = IMAGE_NAME.fullmatch(filename)
+        if match is None:
             raise problem(404, "image_not_found", "Image not found.")
-        root = images.resolve()
-        path = (root / filename).resolve()
-        if path.parent != root or not path.is_file():
+        data = images.read(filename)
+        if data is None:
             raise problem(404, "image_not_found", "Image not found.")
-        return FileResponse(path, headers=IMAGE_HEADERS)
+        return Response(
+            data, media_type=IMAGE_MEDIA_TYPES[match.group(1)], headers=IMAGE_HEADERS
+        )
 
     return app

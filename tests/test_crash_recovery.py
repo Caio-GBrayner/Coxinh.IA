@@ -1,7 +1,7 @@
 """Teste de queda (item 3.5): derrubar a API no meio do Impasse e retomar.
 
-Sobe a API em um processo separado, com agentes falsos e SQLite em um diretório
-temporário, mata o processo com SIGKILL e sobe outro sobre os mesmos arquivos.
+Sobe a API em um processo separado, com agentes falsos e um banco temporário
+(SQLite ou Postgres), mata o processo com SIGKILL e sobe outro sobre o mesmo banco.
 """
 
 import os
@@ -27,7 +27,8 @@ def free_port() -> int:
 
 
 class ApiProcess:
-    def __init__(self, data_dir: Path) -> None:
+    def __init__(self, data_dir: Path, database_env: dict[str, str]) -> None:
+        self.database_env = database_env
         self.data_dir = data_dir
         self.port = free_port()
         self.process: subprocess.Popen | None = None
@@ -40,9 +41,7 @@ class ApiProcess:
         env = {
             **os.environ,
             "PYTHONPATH": str(ROOT),
-            "PERSISTENCE": "sqlite",
-            "DATABASE_PATH": str(self.data_dir / "app.db"),
-            "CHECKPOINT_DATABASE_PATH": str(self.data_dir / "checkpoints.db"),
+            **self.database_env,
             "IMAGE_STORAGE_DIR": str(self.data_dir / "images"),
             # Vazias e não removidas: o load_dotenv() do processo não sobrescreve.
             "LANGFUSE_PUBLIC_KEY": "",
@@ -82,8 +81,8 @@ class ApiProcess:
 
 
 @pytest.fixture
-def api(tmp_path):
-    process = ApiProcess(tmp_path)
+def api(tmp_path, backend):
+    process = ApiProcess(tmp_path, backend.env())
     yield process
     process.stop()
 

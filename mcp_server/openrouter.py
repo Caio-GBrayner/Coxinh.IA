@@ -1,13 +1,13 @@
 """Provedor real de imagem via OpenRouter (Image API).
 
 Endpoint: POST https://openrouter.ai/api/v1/images com `model` e `prompt`.
-A resposta traz a imagem em base64 em `data[0].b64_json`; ela é gravada em
-disco e o provedor devolve só a referência, nunca os bytes (contrato MCP).
+A resposta traz a imagem em base64 em `data[0].b64_json`; ela é gravada no
+`ImageStore` (disco ou Postgres) e o provedor devolve só a referência, nunca os bytes (contrato MCP).
 
 Garantias:
-- o arquivo é nomeado pela chave de idempotência; se já existir, nenhuma chamada
+- a imagem é nomeada pela chave de idempotência; se já existir, nenhuma chamada
   é feita, inclusive depois de reiniciar o servidor;
-- a gravação é atômica (arquivo temporário e rename);
+- a gravação é atômica;
 - modelos pagos são recusados, a menos que OPENROUTER_ALLOW_PAID=true. Não há
   troca automática para variante paga.
 """
@@ -16,17 +16,21 @@ import base64
 import binascii
 import os
 from pathlib import Path
-import tempfile
 
 import httpx
 from pydantic import SecretStr
 
 from mcp_server.images import ImageProviderError, ProviderImage
+from src.persistence.image_store import (
+    DEFAULT_IMAGE_DIR,
+    FileImageStore,
+    ImageStore,
+    build_image_store,
+)
 
 
 OPENROUTER_IMAGES_URL = "https://openrouter.ai/api/v1/images"
 DEFAULT_IMAGE_MODEL = "recraft/recraft-v4.1-flash-v2:free"
-DEFAULT_STORAGE_DIR = "data/images"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 
 EXTENSIONS = {
@@ -38,14 +42,15 @@ EXTENSIONS = {
 
 
 class OpenRouterImageProvider:
-    """Gera a imagem no OpenRouter e grava o arquivo em `storage_dir`."""
+    """Gera a imagem no OpenRouter e grava em `store` (ou em `storage_dir`)."""
 
     def __init__(
         self,
         api_key: SecretStr,
         *,
         model: str = DEFAULT_IMAGE_MODEL,
-        storage_dir: str | Path = DEFAULT_STORAGE_DIR,
+        storage_dir: str | Path = DEFAULT_IMAGE_DIR,
+        store: ImageStore | None = None,
         allow_paid: bool = False,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         transport: httpx.BaseTransport | None = None,
@@ -57,21 +62,21 @@ class OpenRouterImageProvider:
             )
         self._api_key = api_key
         self._model = model
-        self._storage_dir = Path(storage_dir)
+        self._store = FileImageStore(storage_dir) if store is None else store
         self._timeout = timeout
         self._transport = transport
         self.name = f"openrouter:{model}"
 
     def generate(self, request: str, *, idempotency_key: str) -> ProviderImage:
-        existing = self._find_stored(idempotency_key)
+        existing = self._find(idempotency_key)
         if existing is not None:
             return ProviderImage(reference=self._reference(existing))
 
         payload = self._call_api(request)
         data, media_type = self._extract_image(payload)
-        path = self._store(idempotency_key, data, media_type)
+        filename = self._save(idempotency_key, data, media_type)
         return ProviderImage(
-            reference=self._reference(path),
+            reference=self._reference(filename),
             request_id=payload.get("id"),
         )
 
@@ -113,31 +118,26 @@ class OpenRouterImageProvider:
         media_type = first.get("media_type") or "image/png"
         return data, media_type
 
-    def _store(self, key: str, data: bytes, media_type: str) -> Path:
-        extension = EXTENSIONS.get(media_type, ".png")
-        self._storage_dir.mkdir(parents=True, exist_ok=True)
-        target = self._storage_dir / f"{key}{extension}"
-        fd, temp_name = tempfile.mkstemp(dir=self._storage_dir, suffix=".tmp")
+    def _save(self, key: str, data: bytes, media_type: str) -> str:
         try:
-            with os.fdopen(fd, "wb") as handle:
-                handle.write(data)
-            os.replace(temp_name, target)
-        except OSError as exc:
-            Path(temp_name).unlink(missing_ok=True)
-            raise ImageProviderError(f"Não foi possível gravar a imagem: {exc}") from exc
-        return target
+            return self._store.save(key, EXTENSIONS.get(media_type, ".png"), data)
+        except Exception as exc:
+            raise ImageProviderError(
+                f"Não foi possível gravar a imagem: {type(exc).__name__}"
+            ) from exc
 
-    def _find_stored(self, key: str) -> Path | None:
-        for extension in EXTENSIONS.values():
-            candidate = self._storage_dir / f"{key}{extension}"
-            if candidate.is_file():
-                return candidate
-        return None
+    def _find(self, key: str) -> str | None:
+        try:
+            return self._store.find(key)
+        except Exception as exc:
+            raise ImageProviderError(
+                f"Não foi possível consultar as imagens: {type(exc).__name__}"
+            ) from exc
 
     @staticmethod
-    def _reference(path: Path) -> str:
+    def _reference(filename: str) -> str:
         """Referência estável `images/<arquivo>`, servida pela API em `/images/<arquivo>`."""
-        return f"images/{path.name}"
+        return f"images/{filename}"
 
 
 def build_image_provider_from_env():
@@ -154,7 +154,6 @@ def build_image_provider_from_env():
         SecretStr(key),
         model=os.getenv("OPENROUTER_IMAGE_MODEL", DEFAULT_IMAGE_MODEL).strip()
         or DEFAULT_IMAGE_MODEL,
-        storage_dir=os.getenv("IMAGE_STORAGE_DIR", DEFAULT_STORAGE_DIR).strip()
-        or DEFAULT_STORAGE_DIR,
+        store=build_image_store(),
         allow_paid=os.getenv("OPENROUTER_ALLOW_PAID", "").strip().lower() == "true",
     )

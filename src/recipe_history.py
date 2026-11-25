@@ -2,11 +2,11 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
-from src.persistence.recipe_store import RecipeStore
+from src.persistence.recipe_store import RecipeRepository
 
 
 class SessionRecipeHistory:
-    """Guarda as receitas concluídas, em memória ou em um `RecipeStore`.
+    """Guarda as receitas concluídas, em memória ou em um banco.
 
     Sem `store`, cada instância tem o próprio histórico e ele some com o
     processo. Com `store`, as receitas sobrevivem a reinícios e todas as
@@ -14,7 +14,7 @@ class SessionRecipeHistory:
     A listagem segue a ordem de gravação, da mais antiga para a mais recente.
     """
 
-    def __init__(self, store: RecipeStore | None = None) -> None:
+    def __init__(self, store: RecipeRepository | None = None) -> None:
         """Cria um histórico vazio em memória ou ligado ao banco."""
         self._store = store
         self._recipes: dict[str, dict[str, Any]] = {}
