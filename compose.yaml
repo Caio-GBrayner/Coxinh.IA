@@ -1,15 +1,37 @@
 # Serviços do Coxinh.IA. Contratos em docs/CONTRATO_API.md e docs/CONTRATO_MCP.md.
 #
 # `api`: porta de entrada do front (FastAPI). Executa o grafo, guarda checkpoints,
-#        decisões do Impasse e receitas em SQLite e serve as imagens.
+#        decisões do Impasse e receitas no Postgres e serve as imagens.
 # `front`: React compilado e servido pelo nginx em http://localhost:3000; repassa
 #          /api para a `api`, então o navegador fala com uma única origem.
 # `mcp`: ferramentas sem estado compartilhado (validação e imagem), chamadas pela
-#        `api` em http://mcp:8000/mcp. Grava as imagens no mesmo volume.
+#        `api` em http://mcp:8000/mcp. Grava as imagens no mesmo banco.
+# `db`: Postgres, acessível só pelos outros serviços. A senha vale apenas para este
+#       banco local; em produção, DATABASE_URL vem do painel da hospedagem.
 #
-# O volume `coxinh-data` guarda bancos e imagens: parar e subir os containers não
-# perde receitas nem impasses em aberto.
+# O volume `coxinh-postgres` guarda receitas, impasses em aberto e imagens: parar e
+# subir os containers não perde nada.
+x-database: &database
+  PERSISTENCE: "postgres"
+  DATABASE_URL: "postgresql://coxinh:coxinh@db:5432/coxinh"
+
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: coxinh
+      POSTGRES_PASSWORD: coxinh
+      POSTGRES_DB: coxinh
+    volumes:
+      - coxinh-postgres:/var/lib/postgresql/data
+    healthcheck:
+      # Por TCP: durante a criação do banco, o Postgres só atende pelo socket local.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U coxinh"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   front:
     build: ./frontend
     ports:
@@ -38,16 +60,13 @@ services:
       - path: .env
         required: false
     environment:
+      <<: *database
       MCP_SERVER_URL: "http://mcp:8000/mcp"
-      PERSISTENCE: "sqlite"
-      DATABASE_PATH: "/app/data/coxinh.db"
-      CHECKPOINT_DATABASE_PATH: "/app/data/checkpoints.db"
-      IMAGE_STORAGE_DIR: "/app/data/images"
     ports:
       - "8080:8080"
-    volumes:
-      - coxinh-data:/app/data
     depends_on:
+      db:
+        condition: service_healthy
       mcp:
         condition: service_healthy
     healthcheck:
@@ -68,13 +87,15 @@ services:
       - path: .env
         required: false
     environment:
+      # Igual à `api`: as duas precisam gravar e ler imagens no mesmo lugar.
+      <<: *database
       MCP_HOST: "0.0.0.0"
       MCP_PORT: "8000"
-      IMAGE_STORAGE_DIR: "/app/data/images"
     expose:
       - "8000"
-    volumes:
-      - coxinh-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -87,4 +108,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  coxinh-data:
+  coxinh-postgres:
