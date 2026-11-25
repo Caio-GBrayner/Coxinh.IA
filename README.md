@@ -8,7 +8,7 @@
 
 O Coxinh.IA transforma ingredientes e ideias improváveis em receitas de coxinha. É um projeto de humor e sátira criado para estudar fluxos com agentes de IA: a receita pode ser absurda, mas o sistema precisa mostrar como chegou ao resultado e apresentar o aconselhamento de consumo com suas fontes e incertezas.
 
-**Estado atual:** API oficial em `src/api/app.py`, interface React com polling e carrossel global, persistência SQLite e imagens via OpenRouter (ou simulação sem chave).
+**Estado atual:** API oficial em `src/api/app.py`, interface React com polling e carrossel global, persistência em SQLite ou Postgres e imagens via OpenRouter (ou simulação sem chave).
 
 ## Rodar localmente
 
@@ -96,7 +96,7 @@ docker compose logs -f api
 docker compose down
 ```
 
-Se alterar o `.env`, rode `docker compose down` e depois `docker compose up -d` para recriar os serviços com as novas configurações. `docker compose down -v` apaga o volume `coxinh-data`, incluindo receitas, impasses e imagens. Use-o somente se quiser apagar esses dados. As portas `3000` e `8080` precisam estar livres no computador.
+Se alterar o `.env`, rode `docker compose down` e depois `docker compose up -d` para recriar os serviços com as novas configurações. `docker compose down -v` apaga o volume `coxinh-postgres`, incluindo receitas, impasses e imagens. Use-o somente se quiser apagar esses dados. As portas `3000` e `8080` precisam estar livres no computador.
 
 ## Como o sistema funciona
 
@@ -124,7 +124,7 @@ flowchart TD
     M --> F[Finalização]
 ```
 
-O grafo está em [`src/graph/builder.py`](./src/graph/builder.py). A API usa SQLite por padrão para guardar receitas, decisões do Impasse e checkpoints. No Docker, esses dados ficam no volume `coxinh-data`.
+O grafo está em [`src/graph/builder.py`](./src/graph/builder.py). No Docker, receitas, decisões do Impasse, checkpoints e imagens ficam no Postgres do serviço `db` (volume `coxinh-postgres`). Fora do Docker, a API usa SQLite por padrão; para usar Postgres, defina `PERSISTENCE=postgres` e `DATABASE_URL`.
 
 ### Exemplo de uma execução com Impasse
 
@@ -180,7 +180,7 @@ Principais operações:
 | `POST /recipes/{thread_id}/impasse` | Salva orientação, retoma, aceita ou encerra uma execução pausada. |
 | `GET /images/{filename}` | Busca uma imagem armazenada. |
 
-O histórico global usa SQLite. A interface guarda o identificador da execução ativa e consulta seu estado por polling. A API deve rodar em um único processo por banco SQLite. Impasses em aberto sobrevivem a reinícios; uma geração interrompida pode precisar ser refeita.
+O histórico global fica no banco (Postgres no Docker, SQLite por padrão fora dele). A interface guarda o identificador da execução ativa e consulta seu estado por polling. A API deve rodar em um único processo por banco. Impasses em aberto sobrevivem a reinícios; uma geração interrompida pode precisar ser refeita.
 
 ## Testes
 
@@ -233,11 +233,11 @@ Quando o Impasse pausar, a resposta precisa ser um JSON válido. Uma decisão co
 | `src/graph/nodes/`, `src/graph/builder.py` | Agentes, geração da imagem e rotas do fluxo. |
 | `src/graph/workflow.py`, `src/recipe_session.py` | Checkpoints, retomada do Impasse e histórico. |
 | `src/api/app.py` | API FastAPI usada pelo frontend. |
-| `src/persistence/` | SQLite para receitas, decisões e checkpoints. |
+| `src/persistence/` | SQLite ou Postgres para receitas, decisões, checkpoints e imagens. |
 | `src/utils/web_search.py` | Pesquisa Tavily do agente de saúde. |
 | `mcp_server/` | Ferramentas MCP de validação e geração de imagem. |
 | `frontend/` | Interface React, configuração do Vite e arquivos do Docker. |
-| `compose.yaml`, `Dockerfile` | Serviços `front`, `api` e `mcp` e volume de dados. |
+| `compose.yaml`, `Dockerfile` | Serviços `front`, `api`, `mcp` e `db` (Postgres) e volume de dados. |
 | `tests/` | Testes automatizados. |
 | `docs/design/design.md` | Especificação visual da interface. |
 | `docs/plano_execucao_coxinh_ia.md` | Etapas e critérios do projeto. |
@@ -247,7 +247,7 @@ Quando o Impasse pausar, a resposta precisa ser um JSON válido. Uma decisão co
 - A imagem gerada depende de `OPENROUTER_API_KEY`. Sem a chave, o sistema usa uma referência simulada e não exibe uma imagem real.
 - O aconselhamento de saúde é informativo. As fontes ajudam a rastrear a pesquisa, mas não garantem segurança de consumo.
 - Uma falha de rede após o envio de um pedido pode impedir que o navegador receba o identificador da execução. A interface consulta o histórico e não repete o envio automaticamente.
-- O projeto usa um único processo de API por banco SQLite.
+- O projeto usa um único processo de API por banco.
 
 ## Projeto
 

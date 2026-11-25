@@ -20,10 +20,10 @@ Complementa `docs/plano_execucao_coxinh_ia.md` (etapa 10 e seção 6). Em caso d
 
 | Serviço | Responsabilidade | Persistência |
 | --- | --- | --- |
-| `app` (serviço `api`) | API HTTP, grafo LangGraph, estado das conversas e decisões do Impasse. | SQLite (`data/coxinh.db` e `data/checkpoints.db`) no volume `coxinh-data`. |
-| `mcp` | Ferramentas sem estado compartilhado: `validate_recipe_resources`, `generate_coxinha_image` e `search_web`. | Arquivos de imagem em `data/images`, no mesmo volume, nomeados pela chave de idempotência. |
+| `app` (serviço `api`) | API HTTP, grafo LangGraph, estado das conversas e decisões do Impasse. | Postgres do serviço `db` (volume `coxinh-postgres`). |
+| `mcp` | Ferramentas sem estado compartilhado: `validate_recipe_resources`, `generate_coxinha_image` e `search_web`. | Imagens no mesmo Postgres, nomeadas pela chave de idempotência. |
 
-Os dois serviços não compartilham arquivo SQLite; compartilham apenas a pasta de imagens, que a `api` serve em `/images`. A aplicação chama o `mcp` por HTTP, por exemplo em `http://mcp:8000/mcp`.
+Os dois serviços usam o mesmo banco: o `mcp` grava as imagens e a `api` as serve em `/images`. `PERSISTENCE` e `DATABASE_URL` precisam ser iguais nos dois. Fora do Docker, em SQLite, eles compartilham a pasta de imagens. A aplicação chama o `mcp` por HTTP, por exemplo em `http://mcp:8000/mcp`.
 
 **Estado do Impasse.** O estado vive na aplicação (`InMemoryWorkflow`, em `src/graph/workflow.py`), e o plano proíbe criar uma segunda cópia dele no servidor. Por isso `record_impasse_decision` fica no processo da aplicação, que a expõe pela mesma interface de ferramenta, sem passar pelo container `mcp`. Registrar a ferramenta com `create_server(session=session)`, reutilizando a mesma `RecipeSession` da aplicação.
 
