@@ -81,7 +81,7 @@ class InMemoryDecisionStore:
                 return
             for (stored_thread, _), stored in self._by_key.items():
                 if stored_thread == thread_id and stored.state_version == state_version:
-                    raise VersionAlreadyClaimed(_copy(stored))
+                    raise VersionAlreadyClaimed(_clone(stored))
             self._by_key[(thread_id, key)] = StoredDecision(
                 key, fingerprint, state_version, completed=False
             )
@@ -222,8 +222,11 @@ class SqliteDecisionStore:
 
 
 def _copy(stored: StoredDecision | None) -> StoredDecision | None:
-    if stored is None:
-        return None
+    return None if stored is None else _clone(stored)
+
+
+def _clone(stored: StoredDecision) -> StoredDecision:
+    """Cópia independente: quem lê o registro não altera o que está guardado."""
     return StoredDecision(
         stored.idempotency_key,
         stored.fingerprint,

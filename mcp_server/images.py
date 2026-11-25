@@ -26,12 +26,13 @@ class ImageProvider(Protocol):
 
     def generate(self, request: str, *, idempotency_key: str) -> ProviderImage:
         """Gera uma imagem. Levanta ImageProviderError em falhas externas."""
+        ...
 
 
 class SimulatedImageProvider:
     """Provedor simulado. Não acessa rede nem gera custo.
 
-    O provedor real depende da decisão 12 do plano.
+    O provedor real fica em `mcp_server/openrouter.py`.
     """
 
     name = "simulated"

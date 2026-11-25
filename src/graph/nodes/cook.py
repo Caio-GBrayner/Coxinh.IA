@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from src.graph.prompts.cook import COOK_PROMPT
 from src.graph.resource_validation import validate_recipe_resources
@@ -16,7 +17,10 @@ def cook_node(state: RecipeState) -> dict[str, object]:
     if state.get("status") != "approved":
         raise ValueError("O Cozinheiro precisa de uma proposta aprovada.")
 
-    recipe = Recipe.model_validate(state["recipe"])
+    recipe_value = state.get("recipe")
+    if recipe_value is None:
+        raise ValueError("O Cozinheiro precisa de uma receita.")
+    recipe = Recipe.model_validate(recipe_value)
     authorization = validate_recipe_resources(
         recipe,
         authorized_ingredients=state.get("authorized_ingredients"),
@@ -28,8 +32,7 @@ def cook_node(state: RecipeState) -> dict[str, object]:
     )
     # Só recursos fora das listas autorizadas impedem o Cozinheiro. Itens salvos no
     # Impasse que a proposta não usa são cobrados pelo SubChef na revisão; aqui a
-    # proposta já foi aprovada ou aceita como está pelo usuário, e barrar prenderia
-    # a conversa sem saída.
+    # proposta já foi aprovada ou aceita como está pelo usuário.
     if (
         authorization.unauthorized_ingredients
         or authorization.unauthorized_utensils
@@ -45,7 +48,8 @@ def cook_node(state: RecipeState) -> dict[str, object]:
         "utensils": recipe.utensils,
         "preparation_methods": recipe.preparation_methods,
     }
-    context = {"recipe": recipe.model_dump(mode="json")}
+    context: dict[str, Any] = {"recipe": recipe.model_dump(mode="json")}
+    mismatches: list[str] = []
 
     model = call_llm(COOK_TEMPERATURE).with_structured_output(CookOutput)
     chain = COOK_PROMPT | model

@@ -234,7 +234,7 @@ def create_server(
 def build_default_server() -> FastMCP:
     """Servidor do container `mcp`: ferramentas sem estado compartilhado.
 
-    A busca web entra aqui quando a etapa 9 for integrada.
+    A busca web não é registrada aqui: o nó de saúde chama o Tavily diretamente.
     """
     from mcp_server.openrouter import build_image_provider_from_env
 

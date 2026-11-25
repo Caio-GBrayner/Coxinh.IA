@@ -136,7 +136,7 @@ class OpenRouterImageProvider:
 
     @staticmethod
     def _reference(path: Path) -> str:
-        """Referência estável: `images/<arquivo>`. A API HTTP futura a serve."""
+        """Referência estável `images/<arquivo>`, servida pela API em `/images/<arquivo>`."""
         return f"images/{path.name}"
 
 
