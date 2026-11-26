@@ -103,7 +103,7 @@
     color: var(--green);
 }
 .idea-card h1 {
-    margin-bottom: 2rem;
+    margin: 0 0 2rem;
     max-width: 10ch;
 }
 .idea-card .hint {
@@ -458,6 +458,9 @@
 .workflow {
     background: #f5f5f5;
 }
+.workflow.section.workflow-loading {
+    padding: 10px;
+}
 .workflow:focus {
     outline: none;
 }
@@ -506,87 +509,65 @@
     text-decoration: underline;
 }
 .assembly {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    min-height: 570px;
     text-align: center;
-    padding: 2rem 0 4rem;
+    padding: 2.25rem 1rem 4.5rem;
+    border-radius: 18px;
     background: #000;
     color: #fff;
     margin-bottom: 2rem;
 }
-.assembly h2 {
-    font-size: clamp(3rem, 6vw, 6rem);
+.assembly-scene {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    overflow: hidden;
 }
-.assembly-art {
-    height: 240px;
+.assembly-scene canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.assembly-fallback {
+    display: none;
+    position: absolute;
+    width: 105px;
+    height: 156px;
+    object-fit: contain;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+.assembly-scene[data-renderer-failed="true"] .assembly-fallback {
+    display: block;
+}
+.assembly-brand,
+.assembly h2,
+.assembly > p:last-of-type {
     position: relative;
-    max-width: 320px;
-    margin: 2rem auto;
+    z-index: 1;
 }
-.dough-layer {
+.assembly-brand {
+    margin: 0 auto 1rem;
+    color: #fff;
+}
+.assembly h2 {
+    position: relative;
+    z-index: 1;
+    margin: 0 auto;
+    font-size: clamp(3rem, 7vw, 6rem);
+    line-height: 1;
+    text-shadow: none;
+}
+.assembly > p:last-of-type {
     position: absolute;
-    bottom: 30px;
-    left: 35px;
-    width: 250px;
-    height: 70px;
-    background: #fff;
-    border-radius: 50%;
-    animation: dough 4s ease-in-out infinite;
-}
-.filling-layer {
-    position: absolute;
-    bottom: 55px;
-    left: 100px;
-    width: 120px;
-    height: 70px;
-    border-radius: 50%;
-    background: var(--green);
-    animation: filling 4s ease-in-out infinite;
-}
-.assembly-art img {
-    height: 180px;
-    position: absolute;
-    left: 85px;
-    top: 20px;
-    animation: closure 4s ease-in-out infinite;
-}
-@keyframes filling {
-    0%,
-    15% {
-        transform: translateY(-90px);
-        opacity: 0;
-    }
-    35%,
-    55% {
-        transform: translateY(0);
-        opacity: 1;
-    }
-    70%,
-    100% {
-        opacity: 0;
-    }
-}
-@keyframes dough {
-    0%,
-    50% {
-        transform: scaleX(1);
-        opacity: 1;
-    }
-    70%,
-    100% {
-        transform: scaleX(0.6);
-        opacity: 0;
-    }
-}
-@keyframes closure {
-    0%,
-    55% {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    75%,
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    bottom: 4.2rem;
+    left: 1rem;
+    right: 1rem;
+    margin: 0;
 }
 .result-title {
     margin-bottom: 3rem;
@@ -994,10 +975,15 @@ body {
         padding: 1.25rem;
     }
     .assembly {
-        padding: 2rem 1rem;
+        min-height: 570px;
+        padding: 2.25rem 1rem 4.5rem;
     }
-    .assembly-art {
-        transform: scale(0.85);
+    .assembly h2 {
+        max-width: 9ch;
+        font-size: clamp(2.8rem, 12vw, 4rem);
+    }
+    .assembly > p:last-of-type {
+        bottom: 4.2rem;
     }
     .result-actions > * {
         width: 100%;
@@ -1031,10 +1017,6 @@ body {
         clip-path: none;
     }
     .class-reveal-divider {
-        display: none;
-    }
-    .assembly-art .dough-layer,
-    .assembly-art .filling-layer {
         display: none;
     }
 }
