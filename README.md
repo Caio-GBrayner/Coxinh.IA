@@ -6,6 +6,8 @@
 
 **O melhor harness de IA para as coxinhas mais sem sentido que você possa imaginar.**
 
+https://coxinh-ia.vercel.app/
+
 O Coxinh.IA transforma ingredientes e ideias improváveis em receitas de coxinha. É um projeto de humor e sátira criado para estudar fluxos com agentes de IA: a receita pode ser absurda, mas o sistema precisa mostrar como chegou ao resultado e apresentar o aconselhamento de consumo com suas fontes e incertezas.
 
 **Estado atual:** API oficial em `src/api/app.py`, interface React com polling e carrossel global, persistência em SQLite ou Postgres e imagens via OpenRouter (ou simulação sem chave).
