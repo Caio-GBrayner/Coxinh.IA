@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { getRecipe } from "./recipeApi";
 import type { FinalResponse, SavedRecipe } from "./recipeTypes";
 import { copy } from "./content";
@@ -7,14 +7,7 @@ import { Impasse } from "./Impasse";
 import { Gallery } from "./Gallery";
 import { RecipeResult } from "./RecipeResult";
 import { ClassPhotoReveal } from "./ClassPhotoReveal";
-
 import "./App.css";
-
-const AssemblyScene = lazy(() =>
-    import("./AssemblyScene").then(({ AssemblyScene: Component }) => ({
-        default: Component,
-    })),
-);
 
 function App() {
     const session = useRecipeSession();
@@ -199,7 +192,7 @@ function App() {
                     detail) && (
                     <section
                         id="workflow"
-                        className={`workflow section${session.busy ? " workflow-loading" : ""}`}
+                        className="workflow section"
                         ref={workflow}
                         tabIndex={-1}
                         aria-label={copy.active}
@@ -218,11 +211,19 @@ function App() {
                         )}
                         {session.busy && (
                             <div className="assembly" role="status">
-                                <Suspense fallback={null}>
-                                    <AssemblyScene />
-                                </Suspense>
-                                <p className="eyebrow assembly-brand">{copy.brand}</p>
+                                <p className="eyebrow">{copy.brand}</p>
                                 <h2>{copy.processing}</h2>
+                                <div
+                                    className="assembly-art"
+                                    aria-hidden="true"
+                                >
+                                    <span className="dough-layer" />
+                                    <span className="filling-layer" />
+                                    <img
+                                        src="/assets/coxinh-symbol.png"
+                                        alt=""
+                                    />
+                                </div>
                                 <p>{copy.atmosphere}</p>
                             </div>
                         )}
